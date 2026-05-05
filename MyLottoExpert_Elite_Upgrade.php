@@ -3438,7 +3438,7 @@ function mleAdvisoryComputeMethodLeaderboard($db, $userId, $lotteryId) {
         $snTblLb = '`' . $pfxLb . 'user_saved_numbers`';
         $snSubLb = $snTblLb . '.`user_id` = ' . $userId . ' AND ' . $snTblLb . '.`lottery_id` = ' . $lotteryId;
         if (in_array('save_intent', $snColsLb, true)) {
-            $snSubLb .= " AND " . $snTblLb . ".`save_intent` NOT IN ('prediction_archive','retired','archived','deleted')";
+            $snSubLb .= " AND " . $snTblLb . ".`save_intent` NOT IN ('retired','archived','deleted')";
         }
         $where .= " AND (`run_id` IS NULL OR `run_id` IN (SELECT `id` FROM " . $snTblLb . " WHERE " . $snSubLb . "))";
     }
@@ -3818,7 +3818,7 @@ function mleAdvisoryBuildPredictionSummary($db, $userId, $lotteryId, $topMethodL
     // Build active-run filter
     $activeFilter = '';
     if (in_array('save_intent', $snCols, true)) {
-        $activeFilter = " AND `save_intent` NOT IN ('prediction_archive','retired','archived','deleted')";
+        $activeFilter = " AND `save_intent` NOT IN ('retired','archived','deleted')";
     }
     // When restricted to specific run IDs, use those directly
     $runIdFilter = '';
@@ -3936,7 +3936,7 @@ function mleAdvisoryLoadPerLotteryDrawResults($db, $userId, $lotteryId, array $r
 
     $activeFilter = '';
     if (in_array('save_intent', $snCols, true)) {
-        $activeFilter = " AND n.`save_intent` NOT IN ('prediction_archive','retired','archived','deleted')";
+        $activeFilter = " AND n.`save_intent` NOT IN ('retired','archived','deleted')";
     }
     // Restrict to active run IDs when provided
     $runIdFilter = '';
@@ -4142,7 +4142,9 @@ function mleAdvisoryLoadActiveSavedEvidence($db, $userId) {
     // Build active filter - exclude all non-active status values
     $filterParts = array();
     if (in_array('save_intent', $snCols, true)) {
-        $filterParts[] = "`save_intent` NOT IN ('prediction_archive','retired','archived','deleted','learning_only','orphaned')";
+        // prediction_archive may be how saved predictions are stored - do NOT exclude it here.
+        // Only exclude rows explicitly marked as non-active evidence.
+        $filterParts[] = "`save_intent` NOT IN ('retired','archived','deleted','learning_only','orphaned')";
     }
     if (in_array('advice_status', $snCols, true)) {
         $filterParts[] = "(`advice_status` IS NULL OR `advice_status` NOT IN ('retired','archived','learning_only','orphaned'))";
@@ -4181,8 +4183,9 @@ function mleAdvisoryLoadActiveSavedEvidence($db, $userId) {
         if (!empty($row['run_uuid']))            { $grouped[$lid]['run_uuids'][]              = (string)$row['run_uuid']; }
         if (!empty($row['snapshot_run_uuid']))   { $grouped[$lid]['snapshot_run_uuids'][]     = (string)$row['snapshot_run_uuid']; }
         if (!empty($row['run_identity_key']))    { $grouped[$lid]['run_identity_keys'][]      = (string)$row['run_identity_key']; }
-        if (!empty($row['prediction_target_id']) && (int)$row['prediction_target_id'] > 0) {
-            $grouped[$lid]['prediction_target_ids'][] = (int)$row['prediction_target_id'];
+        // prediction_target_id can be a string such as ptg_... - do NOT cast to int
+        if (!empty($row['prediction_target_id'])) {
+            $grouped[$lid]['prediction_target_ids'][] = (string)$row['prediction_target_id'];
         }
         if (!empty($row['prediction_target_key'])) {
             $grouped[$lid]['prediction_target_keys'][] = (string)$row['prediction_target_key'];
@@ -4202,7 +4205,7 @@ function mleAdvisoryAttachPerformanceToActiveEvidence($db, $userId, array $activ
     $allRunUuids        = array(); // run_uuid       => lid
     $allSnapshotUuids   = array(); // snapshot_run_uuid => lid
     $allRunIdentKeys    = array(); // run_identity_key  => lid
-    $allTargetIds       = array(); // prediction_target_id (int) => lid
+    $allTargetIds       = array(); // prediction_target_id (string) => lid
     $allTargetKeys      = array(); // prediction_target_key => lid
 
     foreach ($activeRows as $lid => $ldata) {
@@ -4211,7 +4214,8 @@ function mleAdvisoryAttachPerformanceToActiveEvidence($db, $userId, array $activ
         foreach ((array)($ldata['run_uuids']              ?? array()) as $v) { $allRunUuids[(string)$v]     = $lid; }
         foreach ((array)($ldata['snapshot_run_uuids']     ?? array()) as $v) { $allSnapshotUuids[(string)$v]  = $lid; }
         foreach ((array)($ldata['run_identity_keys']      ?? array()) as $v) { $allRunIdentKeys[(string)$v]   = $lid; }
-        foreach ((array)($ldata['prediction_target_ids']  ?? array()) as $v) { $allTargetIds[(int)$v]         = $lid; }
+        // prediction_target_id can be string (e.g. ptg_...) - keep as string
+        foreach ((array)($ldata['prediction_target_ids']  ?? array()) as $v) { $allTargetIds[(string)$v]       = $lid; }
         foreach ((array)($ldata['prediction_target_keys'] ?? array()) as $v) { $allTargetKeys[(string)$v]     = $lid; }
     }
 
@@ -4237,7 +4241,9 @@ function mleAdvisoryAttachPerformanceToActiveEvidence($db, $userId, array $activ
         $orClauses[] = '`run_identity_key` IN (' . implode(',', $quoted) . ')';
     }
     if (!empty($allTargetIds)) {
-        $orClauses[] = '`prediction_target_id` IN (' . implode(',', array_keys($allTargetIds)) . ')';
+        // prediction_target_id values are strings - quote them
+        $quoted = array_map(function($v) use ($db) { return $db->quote($v); }, array_keys($allTargetIds));
+        $orClauses[] = '`prediction_target_id` IN (' . implode(',', $quoted) . ')';
     }
     if (!empty($allTargetKeys)) {
         $quoted = array_map(function($v) use ($db) { return $db->quote($v); }, array_keys($allTargetKeys));
@@ -4257,8 +4263,9 @@ function mleAdvisoryAttachPerformanceToActiveEvidence($db, $userId, array $activ
             if ($lid === 0 && !empty($pr['run_uuid'])          && isset($allRunUuids[(string)$pr['run_uuid']]))             { $lid = $allRunUuids[(string)$pr['run_uuid']]; }
             if ($lid === 0 && !empty($pr['snapshot_run_uuid']) && isset($allSnapshotUuids[(string)$pr['snapshot_run_uuid']])){ $lid = $allSnapshotUuids[(string)$pr['snapshot_run_uuid']]; }
             if ($lid === 0 && !empty($pr['run_identity_key'])  && isset($allRunIdentKeys[(string)$pr['run_identity_key']])) { $lid = $allRunIdentKeys[(string)$pr['run_identity_key']]; }
-            $ptid = (int)($pr['prediction_target_id'] ?? 0);
-            if ($lid === 0 && $ptid > 0 && isset($allTargetIds[$ptid]))                                                     { $lid = $allTargetIds[$ptid]; }
+            // prediction_target_id is a string (may be ptg_...) - do NOT cast to int
+            $ptid = (string)($pr['prediction_target_id'] ?? '');
+            if ($lid === 0 && $ptid !== '' && isset($allTargetIds[$ptid]))                                                  { $lid = $allTargetIds[$ptid]; }
             if ($lid === 0 && !empty($pr['prediction_target_key']) && isset($allTargetKeys[(string)$pr['prediction_target_key']])) { $lid = $allTargetKeys[(string)$pr['prediction_target_key']]; }
             // If no identity key resolved to an active lottery, this row is learning history only - skip it.
             if ($lid <= 0) { continue; }
@@ -5067,18 +5074,57 @@ if ($__mleAction === 'apply_evidence_choices') {
         $__mleSNHasAdviceStatus = in_array('advice_status', $snCols, true);
     } catch (\Throwable $e) {}
 
-    // Helper: also sync advice_status to user_saved_numbers via run_id (skai_learning_performance.run_id -> user_saved_numbers.id)
+    // Helper: sync advice_status to user_saved_numbers using all available identity keys from the performance row
     $__mleApplySavedNumbersStatus = function($perfId, $status) use ($db, $prefix, $workspaceUserId, $snTable, $__mleSNHasAdviceStatus) {
         if (!$__mleSNHasAdviceStatus) { return; }
         try {
             $rawPerf = $db->getPrefix() . 'skai_learning_performance';
-            $db->setQuery("SELECT `run_id` FROM `{$rawPerf}` WHERE `id` = " . (int)$perfId . " AND `user_id` = " . (int)$workspaceUserId . " LIMIT 1");
-            $runId = (int)$db->loadResult();
-            if ($runId <= 0) { return; }
+            $db->setQuery(
+                "SELECT `id`, `run_id`, `run_uuid`, `snapshot_run_uuid`, `run_identity_key`, `prediction_target_id`, `prediction_target_key`" .
+                " FROM `{$rawPerf}`" .
+                " WHERE `id` = " . (int)$perfId . " AND `user_id` = " . (int)$workspaceUserId . " LIMIT 1"
+            );
+            $perfRow = $db->loadAssoc();
+            if (empty($perfRow)) { return; }
+
+            // Build OR conditions to find the matching saved number row using all identity keys
+            $snRaw = $db->getPrefix() . 'user_saved_numbers';
+            $snColsRaw2 = $db->getTableColumns('#__user_saved_numbers', false);
+            $snColsCheck = is_array($snColsRaw2) ? array_keys($snColsRaw2) : array();
+
+            $orParts = array();
+            // run_id in skai_learning_performance links to id in user_saved_numbers
+            $runId = (int)($perfRow['run_id'] ?? 0);
+            if ($runId > 0) {
+                $orParts[] = '`id` = ' . $runId;
+            }
+            // String identity keys - treat as strings
+            $ruuid = trim((string)($perfRow['run_uuid'] ?? ''));
+            if ($ruuid !== '' && in_array('run_uuid', $snColsCheck, true)) {
+                $orParts[] = '`run_uuid` = ' . $db->quote($ruuid);
+            }
+            $suuid = trim((string)($perfRow['snapshot_run_uuid'] ?? ''));
+            if ($suuid !== '' && in_array('snapshot_run_uuid', $snColsCheck, true)) {
+                $orParts[] = '`snapshot_run_uuid` = ' . $db->quote($suuid);
+            }
+            $rik = trim((string)($perfRow['run_identity_key'] ?? ''));
+            if ($rik !== '' && in_array('run_identity_key', $snColsCheck, true)) {
+                $orParts[] = '`run_identity_key` = ' . $db->quote($rik);
+            }
+            $ptid = trim((string)($perfRow['prediction_target_id'] ?? ''));
+            if ($ptid !== '' && in_array('prediction_target_id', $snColsCheck, true)) {
+                $orParts[] = '`prediction_target_id` = ' . $db->quote($ptid);
+            }
+            $ptkey = trim((string)($perfRow['prediction_target_key'] ?? ''));
+            if ($ptkey !== '' && in_array('prediction_target_key', $snColsCheck, true)) {
+                $orParts[] = '`prediction_target_key` = ' . $db->quote($ptkey);
+            }
+            if (empty($orParts)) { return; }
+
             $q2 = $db->getQuery(true)
-                ->update($snTable)
+                ->update($db->quoteName($snRaw))
                 ->set($db->quoteName('advice_status') . ' = ' . $db->quote($status))
-                ->where($db->quoteName('id') . ' = ' . $runId)
+                ->where('(' . implode(' OR ', $orParts) . ')')
                 ->where($db->quoteName('user_id') . ' = ' . (int)$workspaceUserId);
             $db->setQuery($q2);
             $db->execute();
@@ -12618,8 +12664,8 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
         else if (txt.indexOf('View ') === 0) { span.textContent = hidden ? txt.replace('View ', 'Hide ') : txt; }
       }
     }
-    if (t.classList && t.classList.contains('mle-adv-review-runs-btn')) { mleAdvReviewRuns(t); }
-    if (t.classList && t.classList.contains('mle-adv-leave-as-is-btn')) { mleAdvLeaveAsIs(t); }
+    if (btn.classList.contains('mle-adv-review-runs-btn')) { mleAdvReviewRuns(btn); }
+    if (btn.classList.contains('mle-adv-leave-as-is-btn')) { mleAdvLeaveAsIs(btn); }
   });
 }());
 </script>
