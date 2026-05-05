@@ -11177,6 +11177,64 @@ if (!empty($__mleMessages)): ?>
   </div>
 </div>
 
+<!-- -- How This Works: Building your advisory history ------------------- -->
+<div class="mle-start-here" role="region" aria-label="How to use this workspace" style="margin-top:1.5rem">
+
+  <div class="mle-start-here__header">
+    <div class="mle-start-here__header-left">
+      <div class="mle-start-here__eyebrow">How this works</div>
+      <h3 class="mle-start-here__title">Building your advisory history</h3>
+      <p class="mle-start-here__subtitle">Save predictions, let them reach their draw date, and LottoExpert will turn the results into advice.</p>
+    </div>
+    <span class="mle-start-here__badge">Beginner-friendly</span>
+  </div>
+
+  <div class="mle-start-here__body">
+
+    <div class="mle-start-here__steps">
+
+      <div class="mle-start-here__step">
+        <div class="mle-start-here__step-num">1</div>
+        <div class="mle-start-here__step-body">
+          <strong>Run a prediction for a lottery</strong>
+          <span>Use any analysis method: SKAI, AI, Skip/Hit, MCMC, or Frequency. Save the result.</span>
+        </div>
+      </div>
+
+      <div class="mle-start-here__step">
+        <div class="mle-start-here__step-num">2</div>
+        <div class="mle-start-here__step-body">
+          <strong>Wait for the draw and record the result</strong>
+          <span>After the official draw, enter the winning numbers. LottoExpert scores your saved prediction against it.</span>
+        </div>
+      </div>
+
+      <div class="mle-start-here__step">
+        <div class="mle-start-here__step-num">3</div>
+        <div class="mle-start-here__step-body">
+          <strong>Let the advice build up</strong>
+          <span>After 3 or more scored draws, LottoExpert will tell you which method is working best and what to try next. The more draws you complete, the stronger the advice becomes.</span>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="mle-start-here__tip">
+      <div class="mle-start-here__tip-icon">Tip:</div>
+      <div class="mle-start-here__tip-body">
+        <strong>One lottery at a time</strong>
+        <span>Focus on one lottery until you have at least 5 completed draws. That gives LottoExpert enough evidence to give you a reliable recommendation.</span>
+      </div>
+    </div>
+
+    <div class="mle-start-here__advanced">
+      <strong>For power users:</strong> once you have scored runs, use the Ranking Performance, Setup Performance Review, and Draw Results Comparison panels further down to review individual draw details.
+    </div>
+
+  </div>
+</div>
+<!-- -- End How This Works ------------------------------------------------ -->
+
 <!-- -- Advisory Board: Today's LottoExpert Advice ----------------------- -->
 <?php
 // Advisory Board Section
@@ -11676,62 +11734,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
 </script>
 
 <!-- -- Start Here: How to use this workspace (demoted) ------------------ -->
-<div class="mle-start-here" role="region" aria-label="How to use this workspace" style="margin-top:1.5rem">
-
-  <div class="mle-start-here__header">
-    <div class="mle-start-here__header-left">
-      <div class="mle-start-here__eyebrow">How this works</div>
-      <h3 class="mle-start-here__title">Building your advisory history</h3>
-      <p class="mle-start-here__subtitle">Save predictions, let them reach their draw date, and LottoExpert will turn the results into advice.</p>
-    </div>
-    <span class="mle-start-here__badge">Beginner-friendly</span>
-  </div>
-
-  <div class="mle-start-here__body">
-
-    <div class="mle-start-here__steps">
-
-      <div class="mle-start-here__step">
-        <div class="mle-start-here__step-num">1</div>
-        <div class="mle-start-here__step-body">
-          <strong>Run a prediction for a lottery</strong>
-          <span>Use any analysis method: SKAI, AI, Skip/Hit, MCMC, or Frequency. Save the result.</span>
-        </div>
-      </div>
-
-      <div class="mle-start-here__step">
-        <div class="mle-start-here__step-num">2</div>
-        <div class="mle-start-here__step-body">
-          <strong>Wait for the draw and record the result</strong>
-          <span>After the official draw, enter the winning numbers. LottoExpert scores your saved prediction against it.</span>
-        </div>
-      </div>
-
-      <div class="mle-start-here__step">
-        <div class="mle-start-here__step-num">3</div>
-        <div class="mle-start-here__step-body">
-          <strong>Let the advice build up</strong>
-          <span>After 3 or more scored draws, LottoExpert will tell you which method is working best and what to try next. The more draws you complete, the stronger the advice becomes.</span>
-        </div>
-      </div>
-
-    </div>
-
-    <div class="mle-start-here__tip">
-      <div class="mle-start-here__tip-icon">Tip:</div>
-      <div class="mle-start-here__tip-body">
-        <strong>One lottery at a time</strong>
-        <span>Focus on one lottery until you have at least 5 completed draws. That gives LottoExpert enough evidence to give you a reliable recommendation.</span>
-      </div>
-    </div>
-
-    <div class="mle-start-here__advanced">
-      <strong>For power users:</strong> once you have scored runs, use the Ranking Performance, Setup Performance Review, and Draw Results Comparison panels further down to review individual draw details.
-    </div>
-
-  </div>
-</div>
-<!-- -- End How This Works ------------------------------------------------ -->
+<!-- -- Start How This Works section moved above the advisory cards -------- -->
 
 <?php
 $__mleHistoryTarget = 20;
