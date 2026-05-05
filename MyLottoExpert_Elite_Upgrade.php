@@ -3509,7 +3509,7 @@ function mleAdvisoryComputeMethodLeaderboard($db, $userId, $lotteryId) {
     );
 }
 
-function mleAdvisoryComputeSettingsAdvisor($db, $userId, $lotteryId, $method = 'skai') {
+function mleAdvisoryComputeSettingsAdvisor($db, $userId, $lotteryId, $method = 'skai', array $restrictPerfIds = array()) {
     $userId    = (int)$userId;
     $lotteryId = (int)$lotteryId;
     $method    = strtolower(trim((string)$method));
@@ -3535,6 +3535,11 @@ function mleAdvisoryComputeSettingsAdvisor($db, $userId, $lotteryId, $method = '
     } catch (\Throwable $e) {}
     $where = "WHERE slp.`user_id` = {$userId} AND (slp.`lottery_id` = {$lotteryId} OR slp.`target_lottery_id` = {$lotteryId}) AND slp.`source` IN ({$sourceList}) AND slp.`avg_winning_rank` IS NOT NULL";
     if ($hasAdviceStatus) { $where .= " AND (slp.`advice_status` IS NULL OR slp.`advice_status` = 'use_in_advice')"; }
+    // Restrict to matched active perf IDs when provided
+    if (!empty($restrictPerfIds)) {
+        $safeIds = implode(',', array_map('intval', $restrictPerfIds));
+        $where .= " AND slp.`id` IN ({$safeIds})";
+    }
     $snTable   = '`' . $prefix . 'user_saved_numbers`';
     try {
         $sql = "SELECT slp.`top10_hits`, slp.`top20_hits`, slp.`avg_winning_rank`, slp.`missing_hits_count`, slp.`weighted_quality_score`,"
@@ -3647,7 +3652,7 @@ function mleAdvisoryComputeSettingsAdvisor($db, $userId, $lotteryId, $method = '
     );
 }
 
-function mleAdvisoryBuildBatchCleanupRecommendation($db, $userId, $lotteryId) {
+function mleAdvisoryBuildBatchCleanupRecommendation($db, $userId, $lotteryId, array $restrictPerfIds = array()) {
     $userId    = (int)$userId;
     $lotteryId = (int)$lotteryId;
     $noRec     = array('has_recommendation' => false);
@@ -3655,14 +3660,19 @@ function mleAdvisoryBuildBatchCleanupRecommendation($db, $userId, $lotteryId) {
     $prefix    = $db->getPrefix();
     $perfTable = '`' . $prefix . 'skai_learning_performance`';
     $snTable   = '`' . $prefix . 'user_saved_numbers`';
+    $perfRestrict = '';
+    if (!empty($restrictPerfIds)) {
+        $safeIds = implode(',', array_map('intval', $restrictPerfIds));
+        $perfRestrict = " AND `id` IN ({$safeIds})";
+    }
     try {
-        $db->setQuery("SELECT `draw_date`, COUNT(*) AS run_count FROM {$perfTable} WHERE `user_id` = {$userId} AND (`lottery_id` = {$lotteryId} OR `target_lottery_id` = {$lotteryId}) AND `avg_winning_rank` IS NOT NULL GROUP BY `draw_date` HAVING COUNT(*) >= 9 ORDER BY `draw_date` DESC LIMIT 1");
+        $db->setQuery("SELECT `draw_date`, COUNT(*) AS run_count FROM {$perfTable} WHERE `user_id` = {$userId} AND (`lottery_id` = {$lotteryId} OR `target_lottery_id` = {$lotteryId}) AND `avg_winning_rank` IS NOT NULL{$perfRestrict} GROUP BY `draw_date` HAVING COUNT(*) >= 9 ORDER BY `draw_date` DESC LIMIT 1");
         $drawRow = $db->loadAssoc();
     } catch (\Throwable $e) { return $noRec; }
     if (empty($drawRow)) { return $noRec; }
     $drawDate = (string)$drawRow['draw_date'];
     try {
-        $db->setQuery("SELECT slp.`id`, slp.`run_id`, slp.`source`, slp.`top10_hits`, slp.`top20_hits`, slp.`avg_winning_rank`, slp.`missing_hits_count`, slp.`weighted_quality_score` FROM {$perfTable} slp WHERE slp.`user_id` = {$userId} AND (slp.`lottery_id` = {$lotteryId} OR slp.`target_lottery_id` = {$lotteryId}) AND slp.`draw_date` = " . $db->quote($drawDate) . " AND slp.`avg_winning_rank` IS NOT NULL ORDER BY slp.`top10_hits` DESC, slp.`avg_winning_rank` ASC");
+        $db->setQuery("SELECT slp.`id`, slp.`run_id`, slp.`source`, slp.`top10_hits`, slp.`top20_hits`, slp.`avg_winning_rank`, slp.`missing_hits_count`, slp.`weighted_quality_score` FROM {$perfTable} slp WHERE slp.`user_id` = {$userId} AND (slp.`lottery_id` = {$lotteryId} OR slp.`target_lottery_id` = {$lotteryId}) AND slp.`draw_date` = " . $db->quote($drawDate) . " AND slp.`avg_winning_rank` IS NOT NULL{$perfRestrict} ORDER BY slp.`top10_hits` DESC, slp.`avg_winning_rank` ASC");
         $runs = $db->loadAssocList() ?: array();
     } catch (\Throwable $e) { return $noRec; }
     if (count($runs) < 9) { return $noRec; }
@@ -3779,7 +3789,7 @@ function mleAdvisoryBuildBatchCleanupRecommendation($db, $userId, $lotteryId) {
     );
 }
 
-function mleAdvisoryBuildPredictionSummary($db, $userId, $lotteryId, $topMethodLabel, $bestRecipeDesc) {
+function mleAdvisoryBuildPredictionSummary($db, $userId, $lotteryId, $topMethodLabel, $bestRecipeDesc, array $restrictToRunIds = array()) {
     $userId    = (int)$userId;
     $lotteryId = (int)$lotteryId;
     $empty = array(
@@ -3810,11 +3820,17 @@ function mleAdvisoryBuildPredictionSummary($db, $userId, $lotteryId, $topMethodL
     if (in_array('save_intent', $snCols, true)) {
         $activeFilter = " AND `save_intent` NOT IN ('prediction_archive','retired','archived','deleted')";
     }
+    // When restricted to specific run IDs, use those directly
+    $runIdFilter = '';
+    if (!empty($restrictToRunIds)) {
+        $safeIds = implode(',', array_map('intval', $restrictToRunIds));
+        $runIdFilter = " AND `id` IN ({$safeIds})";
+    }
 
     // Total active saved runs
     $totalRuns = 0;
     try {
-        $db->setQuery("SELECT COUNT(*) FROM {$snTable} WHERE `user_id` = {$userId} AND `lottery_id` = {$lotteryId}" . $activeFilter);
+        $db->setQuery("SELECT COUNT(*) FROM {$snTable} WHERE `user_id` = {$userId} AND `lottery_id` = {$lotteryId}" . $activeFilter . $runIdFilter);
         $totalRuns = (int)$db->loadResult();
     } catch (\Throwable $e) {}
 
@@ -3824,7 +3840,8 @@ function mleAdvisoryBuildPredictionSummary($db, $userId, $lotteryId, $topMethodL
     $watchCount  = 0;
     $retireCount = 0;
     try {
-        $db->setQuery("SELECT COUNT(*) AS cnt, SUM(CASE WHEN `advice_status` = 'use_in_advice' OR `advice_status` = '' OR `advice_status` IS NULL THEN 1 ELSE 0 END) AS keep_cnt, SUM(CASE WHEN `advice_status` = 'watch' THEN 1 ELSE 0 END) AS watch_cnt, SUM(CASE WHEN `advice_status` IN ('retired','archived') THEN 1 ELSE 0 END) AS retire_cnt FROM {$perfTable} WHERE `user_id` = {$userId} AND (`lottery_id` = {$lotteryId} OR `target_lottery_id` = {$lotteryId}) AND `avg_winning_rank` IS NOT NULL");
+        $runRestrict = !empty($restrictToRunIds) ? ' AND `run_id` IN (' . implode(',', array_map('intval', $restrictToRunIds)) . ')' : '';
+        $db->setQuery("SELECT COUNT(*) AS cnt, SUM(CASE WHEN `advice_status` = 'use_in_advice' OR `advice_status` = '' OR `advice_status` IS NULL THEN 1 ELSE 0 END) AS keep_cnt, SUM(CASE WHEN `advice_status` = 'watch' THEN 1 ELSE 0 END) AS watch_cnt, SUM(CASE WHEN `advice_status` IN ('retired','archived') THEN 1 ELSE 0 END) AS retire_cnt FROM {$perfTable} WHERE `user_id` = {$userId} AND (`lottery_id` = {$lotteryId} OR `target_lottery_id` = {$lotteryId}) AND `avg_winning_rank` IS NOT NULL" . $runRestrict);
         $perfRow = $db->loadAssoc();
         if (!empty($perfRow)) {
             $scoredDraws = (int)($perfRow['cnt']         ?? 0);
@@ -3848,14 +3865,14 @@ function mleAdvisoryBuildPredictionSummary($db, $userId, $lotteryId, $topMethodL
         $shortReason = 'History is building. Review runs to keep advice quality high.';
     }
 
-    // Load individual active runs (latest 20)
+    // Load individual active runs (latest 20) - restrict to active run IDs when provided
     $individualRuns = array();
     $labelCol  = in_array('label',          $snCols, true) ? '`label`'          : "'' AS `label`";
     $sourceCol = in_array('source',         $snCols, true) ? '`source`'         : "'' AS `source`";
     $dateCol   = in_array('date_saved',     $snCols, true) ? '`date_saved`'     : "'' AS `date_saved`";
     $intentCol = in_array('save_intent',    $snCols, true) ? '`save_intent`'    : "'' AS `save_intent`";
     try {
-        $db->setQuery("SELECT `id`, {$labelCol}, {$sourceCol}, {$dateCol}, {$intentCol} FROM {$snTable} WHERE `user_id` = {$userId} AND `lottery_id` = {$lotteryId}" . $activeFilter . " ORDER BY `id` DESC LIMIT 20");
+        $db->setQuery("SELECT `id`, {$labelCol}, {$sourceCol}, {$dateCol}, {$intentCol} FROM {$snTable} WHERE `user_id` = {$userId} AND `lottery_id` = {$lotteryId}" . $activeFilter . $runIdFilter . " ORDER BY `id` DESC LIMIT 20");
         $snRows = $db->loadAssocList() ?: array();
         foreach ($snRows as $snRow) {
             $runId   = (int)($snRow['id'] ?? 0);
@@ -3902,7 +3919,7 @@ function mleAdvisoryBuildPredictionSummary($db, $userId, $lotteryId, $topMethodL
  * Returns an array keyed by draw_date, each containing an array of run-level rows.
  * Only returns rows that match an active saved run (inner join on run_id).
  */
-function mleAdvisoryLoadPerLotteryDrawResults($db, $userId, $lotteryId) {
+function mleAdvisoryLoadPerLotteryDrawResults($db, $userId, $lotteryId, array $restrictToRunIds = array()) {
     $userId    = (int)$userId;
     $lotteryId = (int)$lotteryId;
     if ($userId <= 0 || $lotteryId <= 0) { return array(); }
@@ -3921,6 +3938,12 @@ function mleAdvisoryLoadPerLotteryDrawResults($db, $userId, $lotteryId) {
     if (in_array('save_intent', $snCols, true)) {
         $activeFilter = " AND n.`save_intent` NOT IN ('prediction_archive','retired','archived','deleted')";
     }
+    // Restrict to active run IDs when provided
+    $runIdFilter = '';
+    if (!empty($restrictToRunIds)) {
+        $safeIds = implode(',', array_map('intval', $restrictToRunIds));
+        $runIdFilter = " AND p.`run_id` IN ({$safeIds})";
+    }
     $labelSel  = in_array('label',           $snCols, true) ? 'n.`label`'           : "'' AS `label`";
     $numsSel   = in_array('numbers_to_play', $snCols, true) ? 'n.`numbers_to_play`' : "'' AS `numbers_to_play`";
     $actSel    = in_array('actual_draw_numbers', $snCols, true) ? 'n.`actual_draw_numbers`' : "NULL AS `actual_draw_numbers`";
@@ -3936,7 +3959,7 @@ function mleAdvisoryLoadPerLotteryDrawResults($db, $userId, $lotteryId) {
                 WHERE p.`user_id` = {$userId}
                   AND (p.`lottery_id` = {$lotteryId} OR p.`target_lottery_id` = {$lotteryId})
                   AND p.`avg_winning_rank` IS NOT NULL
-                  {$activeFilter}
+                  {$activeFilter}{$runIdFilter}
                 ORDER BY p.`draw_date` DESC, p.`avg_winning_rank` ASC
                 LIMIT 50";
         $db->setQuery($sql);
@@ -4097,27 +4120,73 @@ function mleAdvisoryLoadActiveSavedEvidence($db, $userId) {
         $snColsRaw = $db->getTableColumns('#__user_saved_numbers', false);
         $snCols = is_array($snColsRaw) ? array_keys($snColsRaw) : array();
     } catch (\Throwable $e) {}
-    $activeFilter = '';
-    if (in_array('save_intent', $snCols, true)) {
-        $activeFilter = " AND `save_intent` NOT IN ('prediction_archive','retired','archived','deleted')";
+
+    // Build SELECT list for all fields needed to prove a run is active
+    $requiredCols = array('`id`', '`user_id`', '`lottery_id`');
+    $optionalCols = array(
+        'lottery_name', 'source', 'save_intent', 'play_status', 'advice_status',
+        'run_uuid', 'snapshot_run_uuid', 'run_identity_key',
+        'prediction_target_id', 'prediction_target_key',
+        'target_draw_date', 'next_draw_date', 'settings_json', 'params',
+        'label', 'main_numbers', 'extra_ball_numbers',
+    );
+    foreach ($optionalCols as $oc) {
+        if (in_array($oc, $snCols, true)) {
+            $requiredCols[] = '`' . $oc . '`';
+        } else {
+            $requiredCols[] = 'NULL AS `' . $oc . '`';
+        }
     }
-    $lotteryNameExpr = in_array('lottery_name', $snCols, true) ? '`lottery_name`' : "'' AS `lottery_name`";
+    $colExpr = implode(', ', $requiredCols);
+
+    // Build active filter - exclude all non-active status values
+    $filterParts = array();
+    if (in_array('save_intent', $snCols, true)) {
+        $filterParts[] = "`save_intent` NOT IN ('prediction_archive','retired','archived','deleted','learning_only','orphaned')";
+    }
+    if (in_array('advice_status', $snCols, true)) {
+        $filterParts[] = "(`advice_status` IS NULL OR `advice_status` NOT IN ('retired','archived','learning_only','orphaned'))";
+    }
+    if (in_array('play_status', $snCols, true)) {
+        $filterParts[] = "(`play_status` IS NULL OR `play_status` NOT IN ('deleted','archived','retired'))";
+    }
+    $activeFilter = !empty($filterParts) ? ' AND ' . implode(' AND ', $filterParts) : '';
+
     try {
-        $db->setQuery("SELECT `id`, `lottery_id`, {$lotteryNameExpr} FROM {$snTable} WHERE `user_id` = {$userId} AND `lottery_id` > 0" . $activeFilter . " ORDER BY `id` DESC LIMIT 2000");
+        $db->setQuery("SELECT {$colExpr} FROM {$snTable} WHERE `user_id` = {$userId} AND `lottery_id` > 0" . $activeFilter . " ORDER BY `id` DESC LIMIT 2000");
         $rows = $db->loadAssocList() ?: array();
     } catch (\Throwable $e) { return array(); }
+
     $grouped = array();
     foreach ($rows as $row) {
         $lid = (int)($row['lottery_id'] ?? 0);
         if ($lid <= 0) { continue; }
         if (!isset($grouped[$lid])) {
             $grouped[$lid] = array(
-                'lottery_id'   => $lid,
-                'lottery_name' => (string)($row['lottery_name'] ?? ''),
-                'run_ids'      => array(),
+                'lottery_id'             => $lid,
+                'lottery_name'           => (string)($row['lottery_name'] ?? ''),
+                'run_ids'                => array(),
+                'rows'                   => array(),
+                'run_uuids'              => array(),
+                'snapshot_run_uuids'     => array(),
+                'run_identity_keys'      => array(),
+                'prediction_target_ids'  => array(),
+                'prediction_target_keys' => array(),
             );
         }
-        $grouped[$lid]['run_ids'][] = (int)$row['id'];
+        $rid = (int)$row['id'];
+        $grouped[$lid]['run_ids'][]      = $rid;
+        $grouped[$lid]['rows'][$rid]     = $row;
+        // Collect identity keys for multi-key performance matching
+        if (!empty($row['run_uuid']))            { $grouped[$lid]['run_uuids'][]              = (string)$row['run_uuid']; }
+        if (!empty($row['snapshot_run_uuid']))   { $grouped[$lid]['snapshot_run_uuids'][]     = (string)$row['snapshot_run_uuid']; }
+        if (!empty($row['run_identity_key']))    { $grouped[$lid]['run_identity_keys'][]      = (string)$row['run_identity_key']; }
+        if (!empty($row['prediction_target_id']) && (int)$row['prediction_target_id'] > 0) {
+            $grouped[$lid]['prediction_target_ids'][] = (int)$row['prediction_target_id'];
+        }
+        if (!empty($row['prediction_target_key'])) {
+            $grouped[$lid]['prediction_target_keys'][] = (string)$row['prediction_target_key'];
+        }
     }
     return $grouped;
 }
@@ -4127,27 +4196,292 @@ function mleAdvisoryAttachPerformanceToActiveEvidence($db, $userId, array $activ
     if ($userId <= 0 || empty($activeRows)) { return array(); }
     $prefix    = $db->getPrefix();
     $perfTable = '`' . $prefix . 'skai_learning_performance`';
-    $allRunIds = array();
+
+    // Build identity key indices across all lotteries
+    $allRunIds          = array(); // run_id (int)  => lid
+    $allRunUuids        = array(); // run_uuid       => lid
+    $allSnapshotUuids   = array(); // snapshot_run_uuid => lid
+    $allRunIdentKeys    = array(); // run_identity_key  => lid
+    $allTargetIds       = array(); // prediction_target_id (int) => lid
+    $allTargetKeys      = array(); // prediction_target_key => lid
+
     foreach ($activeRows as $lid => $ldata) {
-        foreach ((array)($ldata['run_ids'] ?? array()) as $rid) {
-            $allRunIds[(int)$rid] = $lid;
-        }
+        $lid = (int)$lid;
+        foreach ((array)($ldata['run_ids']                ?? array()) as $v) { $allRunIds[(int)$v]          = $lid; }
+        foreach ((array)($ldata['run_uuids']              ?? array()) as $v) { $allRunUuids[(string)$v]     = $lid; }
+        foreach ((array)($ldata['snapshot_run_uuids']     ?? array()) as $v) { $allSnapshotUuids[(string)$v]  = $lid; }
+        foreach ((array)($ldata['run_identity_keys']      ?? array()) as $v) { $allRunIdentKeys[(string)$v]   = $lid; }
+        foreach ((array)($ldata['prediction_target_ids']  ?? array()) as $v) { $allTargetIds[(int)$v]         = $lid; }
+        foreach ((array)($ldata['prediction_target_keys'] ?? array()) as $v) { $allTargetKeys[(string)$v]     = $lid; }
     }
-    if (empty($allRunIds)) { return array(); }
-    $inList  = implode(',', array_keys($allRunIds));
+
+    if (empty($allRunIds) && empty($allRunUuids) && empty($allSnapshotUuids) && empty($allRunIdentKeys) && empty($allTargetIds) && empty($allTargetKeys)) {
+        return array();
+    }
+
+    // Build OR conditions - a performance row matches if any identity key aligns
+    $orClauses = array();
+    if (!empty($allRunIds)) {
+        $orClauses[] = '`run_id` IN (' . implode(',', array_keys($allRunIds)) . ')';
+    }
+    if (!empty($allRunUuids)) {
+        $quoted = array_map(function($v) use ($db) { return $db->quote($v); }, array_keys($allRunUuids));
+        $orClauses[] = '`run_uuid` IN (' . implode(',', $quoted) . ')';
+    }
+    if (!empty($allSnapshotUuids)) {
+        $quoted = array_map(function($v) use ($db) { return $db->quote($v); }, array_keys($allSnapshotUuids));
+        $orClauses[] = '`snapshot_run_uuid` IN (' . implode(',', $quoted) . ')';
+    }
+    if (!empty($allRunIdentKeys)) {
+        $quoted = array_map(function($v) use ($db) { return $db->quote($v); }, array_keys($allRunIdentKeys));
+        $orClauses[] = '`run_identity_key` IN (' . implode(',', $quoted) . ')';
+    }
+    if (!empty($allTargetIds)) {
+        $orClauses[] = '`prediction_target_id` IN (' . implode(',', array_keys($allTargetIds)) . ')';
+    }
+    if (!empty($allTargetKeys)) {
+        $quoted = array_map(function($v) use ($db) { return $db->quote($v); }, array_keys($allTargetKeys));
+        $orClauses[] = '`prediction_target_key` IN (' . implode(',', $quoted) . ')';
+    }
+
+    $whereOr = '(' . implode(' OR ', $orClauses) . ')';
     $matched = array();
     try {
-        $db->setQuery("SELECT `id`, `run_id`, `lottery_id`, `target_lottery_id`, `source`, `avg_winning_rank`, `draw_date`, `lottery_name` FROM {$perfTable} WHERE `user_id` = {$userId} AND `run_id` IN ({$inList}) AND `avg_winning_rank` IS NOT NULL LIMIT 5000");
+        $db->setQuery("SELECT * FROM {$perfTable} WHERE `user_id` = {$userId} AND {$whereOr} AND `avg_winning_rank` IS NOT NULL LIMIT 5000");
         $perfRows = $db->loadAssocList() ?: array();
         foreach ($perfRows as $pr) {
+            // Resolve which lottery this performance row belongs to via identity key lookup
+            $lid   = 0;
             $runId = (int)($pr['run_id'] ?? 0);
-            $lid   = isset($allRunIds[$runId]) ? (int)$allRunIds[$runId] : (int)($pr['lottery_id'] ?? 0);
+            if ($runId > 0 && isset($allRunIds[$runId]))                                                                    { $lid = $allRunIds[$runId]; }
+            if ($lid === 0 && !empty($pr['run_uuid'])          && isset($allRunUuids[(string)$pr['run_uuid']]))             { $lid = $allRunUuids[(string)$pr['run_uuid']]; }
+            if ($lid === 0 && !empty($pr['snapshot_run_uuid']) && isset($allSnapshotUuids[(string)$pr['snapshot_run_uuid']])){ $lid = $allSnapshotUuids[(string)$pr['snapshot_run_uuid']]; }
+            if ($lid === 0 && !empty($pr['run_identity_key'])  && isset($allRunIdentKeys[(string)$pr['run_identity_key']])) { $lid = $allRunIdentKeys[(string)$pr['run_identity_key']]; }
+            $ptid = (int)($pr['prediction_target_id'] ?? 0);
+            if ($lid === 0 && $ptid > 0 && isset($allTargetIds[$ptid]))                                                     { $lid = $allTargetIds[$ptid]; }
+            if ($lid === 0 && !empty($pr['prediction_target_key']) && isset($allTargetKeys[(string)$pr['prediction_target_key']])) { $lid = $allTargetKeys[(string)$pr['prediction_target_key']]; }
+            // Last resort: use lottery_id column on the performance row itself
+            if ($lid === 0) { $lid = (int)($pr['lottery_id'] ?? 0); }
             if ($lid <= 0) { continue; }
             if (!isset($matched[$lid])) { $matched[$lid] = array(); }
             $matched[$lid][] = $pr;
         }
     } catch (\Throwable $e) {}
     return $matched;
+}
+
+/**
+ * Compute method leaderboard directly from pre-fetched performance rows.
+ * This avoids any DB query and operates only on the passed matched rows.
+ */
+function mleAdvisoryComputeMethodLeaderboardFromRows(array $perfRows) {
+    $empty = array('methods' => array(), 'proof_level' => mleAdvisoryGetProofLevelLabel(0, 0), 'stats' => array());
+    if (empty($perfRows)) { return $empty; }
+    $methods   = array();
+    $drawDates = array();
+    foreach ($perfRows as $row) {
+        $src = strtolower(trim((string)($row['source'] ?? '')));
+        if ($src === '') { $src = 'skai'; }
+        $dd = (string)($row['draw_date'] ?? '');
+        if ($dd !== '') { $drawDates[$dd] = 1; }
+        if (!isset($methods[$src])) {
+            $methods[$src] = array('hits_total' => 0, 'top20_total' => 0, 'rank_sum' => 0.0, 'missing_sum' => 0, 'quality_sum' => 0.0, 'run_count' => 0, 'draw_dates' => array());
+        }
+        $methods[$src]['hits_total']  += (int)($row['top10_hits'] ?? 0);
+        $methods[$src]['top20_total'] += (int)($row['top20_hits'] ?? 0);
+        $methods[$src]['rank_sum']    += (float)($row['avg_winning_rank'] ?? 0);
+        $methods[$src]['missing_sum'] += (int)($row['missing_hits_count'] ?? 0);
+        $methods[$src]['quality_sum'] += (float)($row['weighted_quality_score'] ?? 0);
+        $methods[$src]['run_count']++;
+        if ($dd !== '') { $methods[$src]['draw_dates'][$dd] = 1; }
+    }
+    $totalDraws = count($drawDates);
+    $totalRuns  = count($perfRows);
+    $scored = array();
+    foreach ($methods as $src => $m) {
+        $cnt        = max(1, $m['run_count']);
+        $avgHits    = round($m['hits_total']  / $cnt, 2);
+        $avgTop20   = round($m['top20_total'] / $cnt, 2);
+        $avgRank    = round($m['rank_sum']    / $cnt, 2);
+        $avgMissing = round($m['missing_sum'] / $cnt, 2);
+        $avgQuality = round($m['quality_sum'] / $cnt, 4);
+        $score = ($avgHits * 3.0) + ($avgTop20 * 1.5) - ($avgRank * 0.5) - ($avgMissing * 0.5);
+        if ($avgQuality > 0) { $score += $avgQuality * 2.0; }
+        $scored[] = array(
+            'method'       => $src,
+            'method_label' => mleAdvisoryMethodLabel($src),
+            'score'        => $score,
+            'avg_hits'     => $avgHits,
+            'avg_rank'     => $avgRank,
+            'avg_top20'    => $avgTop20,
+            'avg_missing'  => $avgMissing,
+            'total_hits'   => (int)$m['hits_total'],
+            'run_count'    => (int)$m['run_count'],
+            'draw_count'   => count($m['draw_dates']),
+        );
+    }
+    usort($scored, function($a, $b) { return ($b['score'] > $a['score']) ? 1 : (($b['score'] < $a['score']) ? -1 : 0); });
+    $topScore    = 0.0;
+    $runnerScore = 0.0;
+    foreach ($scored as $i => $item) {
+        $scored[$i]['rank'] = $i + 1;
+        if ($i === 0) { $topScore    = $item['score']; }
+        if ($i === 1) { $runnerScore = $item['score']; }
+    }
+    $totalScore = 0.0;
+    foreach ($scored as $item) { $totalScore += max(0, $item['score']); }
+    $topPct    = $totalScore > 0 ? round(max(0, $topScore)    / $totalScore * 100, 1) : 0.0;
+    $runnerPct = $totalScore > 0 ? round(max(0, $runnerScore) / $totalScore * 100, 1) : 0.0;
+    return array(
+        'methods'     => $scored,
+        'proof_level' => mleAdvisoryGetProofLevelLabel($totalDraws, $totalRuns, $topPct, $runnerPct),
+        'stats'       => array('total_draws' => $totalDraws, 'total_runs' => $totalRuns, 'method_count' => count($scored)),
+    );
+}
+
+/**
+ * Build one lottery advisory card strictly from active saved evidence and matched performance rows.
+ * All calculations use only the passed $activeRows and $matchedPerformanceRows.
+ * No broad lottery-level DB queries are performed.
+ */
+function mleAdvisoryBuildLotteryCardFromEvidence($db, $userId, $lotteryId, $lotteryName, array $activeRows, array $matchedPerformanceRows) {
+    $userId    = (int)$userId;
+    $lotteryId = (int)$lotteryId;
+    $emptyCard = array(
+        'lottery_id' => $lotteryId, 'lottery_name' => $lotteryName, 'has_data' => false,
+        'top_method' => null, 'leaderboard' => array(), 'method_opinions' => array(),
+        'settings_advice' => array('has_advice' => false, 'reason' => '', 'try_next' => '', 'why' => '', 'best_recipe_desc' => '', 'keep_same_list' => ''),
+        'proof_level' => mleAdvisoryGetProofLevelLabel(0, 0), 'next_step' => '', 'what_to_do' => '',
+        'decision' => '', 'why_support' => '', 'base_run_id' => 0, 'stats' => array(),
+        'batch_cleanup' => null, 'prediction_summary' => array(), 'draw_results' => array(),
+    );
+    if ($userId <= 0 || $lotteryId <= 0) { return $emptyCard; }
+
+    // Extract IDs for DB-restricted sub-function calls
+    $activeRunIds = array_keys((array)($activeRows['rows'] ?? array()));
+    if (empty($activeRunIds)) {
+        $activeRunIds = (array)($activeRows['run_ids'] ?? array());
+    }
+    $matchedPerfIds = array();
+    foreach ($matchedPerformanceRows as $pr) {
+        $pid = (int)($pr['id'] ?? 0);
+        if ($pid > 0) { $matchedPerfIds[] = $pid; }
+    }
+
+    // Step 1: compute method leaderboard from matched perf rows only (no DB query)
+    $leaderboard = mleAdvisoryComputeMethodLeaderboardFromRows($matchedPerformanceRows);
+    $methods     = $leaderboard['methods'] ?? array();
+    if (empty($methods)) { return $emptyCard; }
+
+    $topMethod      = $methods[0];
+    $topMethodLabel = mleAdvisoryMethodLabel($topMethod['method']);
+    $proofLevel     = $leaderboard['proof_level'];
+    $proofKey       = $proofLevel['level'] ?? 'too_early';
+
+    // Step 2: settings advisor - restricted to matched perf IDs
+    $settingsAdv  = mleAdvisoryComputeSettingsAdvisor($db, $userId, $lotteryId, $topMethod['method'], $matchedPerfIds);
+    $hasSettingsAdv = !empty($settingsAdv['has_advice']);
+    $settingLabel   = !empty($settingsAdv['setting_label']) ? (string)$settingsAdv['setting_label'] : '';
+
+    // Decision language based on proof level
+    switch ($proofKey) {
+        case 'trusted_recipe':
+            $decision   = 'Stay with ' . $topMethodLabel . ' for now.';
+            $whySupport = $topMethodLabel . ' has the strongest confirmed pattern across your active saved completed draws.';
+            $whatToDo   = $hasSettingsAdv ? 'Keep running ' . $topMethodLabel . ' and try the one setting change shown below.' : 'Stay with ' . $topMethodLabel . ' for the next draw. The pattern is confirmed.';
+            $nextStep   = $topMethodLabel . ' has repeated support. Keep using it and refine one setting at a time.';
+            break;
+        case 'strong_pattern':
+            $decision   = 'Stay with ' . $topMethodLabel . ' for now.';
+            $whySupport = $topMethodLabel . ' has the strongest completed-draw support based only on your active saved evidence.';
+            $whatToDo   = $hasSettingsAdv ? 'Stay with ' . $topMethodLabel . ' and test the suggested ' . ($settingLabel !== '' ? $settingLabel . ' change' : 'setting change') . ' below.' : 'Keep running ' . $topMethodLabel . '. Evidence is building. No setting change needed yet.';
+            $nextStep   = 'Clear patterns are emerging. Consider testing the Settings Advisor recommendation.';
+            break;
+        case 'good_test':
+            $decision   = 'Keep testing ' . $topMethodLabel . ' for now.';
+            $whySupport = $topMethodLabel . ' is showing the best early results across your active saved completed draws.';
+            $whatToDo   = $hasSettingsAdv ? 'Run ' . $topMethodLabel . ' one more draw, then try the ' . ($settingLabel !== '' ? $settingLabel . ' change' : 'setting change') . ' below.' : 'Keep running ' . $topMethodLabel . ' for at least one more draw before changing any settings.';
+            $nextStep   = 'Enough evidence to try one careful setting change. Save a test recipe before making changes.';
+            break;
+        case 'close_race':
+            $secondLabel = count($methods) > 1 ? mleAdvisoryMethodLabel($methods[1]['method']) : 'the second method';
+            $decision    = 'Run both ' . $topMethodLabel . ' and ' . $secondLabel . ' for two more draws.';
+            $whySupport  = $topMethodLabel . ' and ' . $secondLabel . ' are very close in your active saved evidence. More draws are needed before choosing one.';
+            $whatToDo    = 'Run both ' . $topMethodLabel . ' and ' . $secondLabel . ' for at least two more draws before choosing one.';
+            $nextStep    = 'Two methods are close. Run both for a few more draws before choosing one.';
+            break;
+        case 'early_clue':
+            $decision   = 'Keep building evidence with ' . $topMethodLabel . '.';
+            $whySupport = $topMethodLabel . ' is showing early signs, but more active saved completed draws are needed to confirm this direction.';
+            $whatToDo   = 'Keep running ' . $topMethodLabel . '. LottoExpert needs more completed draws to confirm this direction.';
+            $nextStep   = 'Keep saving runs for this lottery. LottoExpert needs more completed draws to give stronger guidance.';
+            break;
+        default:
+            $decision   = 'Save at least 3 completed runs to receive advice.';
+            $whySupport = 'LottoExpert needs scored results from at least 3 active saved completed draws to begin giving reliable guidance.';
+            $whatToDo   = 'Save and complete at least 3 prediction runs for this lottery before LottoExpert can give strong advice.';
+            $nextStep   = 'Save more prediction runs and let them complete their target draws to start building advisory history.';
+            break;
+    }
+
+    // Per-method plain opinion for Beginner Mode
+    $methodOpinions = array();
+    $topScore = !empty($methods) ? (float)($methods[0]['score'] ?? 0) : 0;
+    foreach ($methods as $mi => $m) {
+        $mScore = (float)($m['score'] ?? 0);
+        if ($mi === 0) { $opinion = 'Best direction right now'; }
+        elseif ($mi === 1 && $topScore > 0 && ($mScore / $topScore) >= 0.88) { $opinion = 'Close backup'; }
+        elseif ($mi <= 1) { $opinion = 'Useful support'; }
+        else { $opinion = 'Not leading right now'; }
+        $methodOpinions[] = array('method_label' => $m['method_label'], 'opinion' => $opinion, 'method_key' => $m['method']);
+    }
+
+    // Find best base run from matched perf rows (no broad DB query)
+    $baseRunId = 0;
+    $methodSrcsForBase = array(
+        'skai'     => array('skai_prediction', 'skai_blend', 'skai'),
+        'ai'       => array('ai_prediction', 'ai'),
+        'mcmc'     => array('mcmc_prediction', 'mcmc'),
+        'skip_hit' => array('skip', 'skip_hit', 'skiphit'),
+        'skip'     => array('skip', 'skip_hit', 'skiphit'),
+    );
+    $topKey      = strtolower(trim((string)($topMethod['method'] ?? '')));
+    $baseSources = isset($methodSrcsForBase[$topKey]) ? $methodSrcsForBase[$topKey] : array($topKey);
+    $bestQuality = -PHP_FLOAT_MAX;
+    foreach ($matchedPerformanceRows as $pr) {
+        $prSrc = strtolower(trim((string)($pr['source'] ?? '')));
+        if (!in_array($prSrc, $baseSources, true)) { continue; }
+        $q = (float)($pr['weighted_quality_score'] ?? 0);
+        if ($q > $bestQuality) { $bestQuality = $q; $baseRunId = (int)($pr['run_id'] ?? 0); }
+    }
+
+    $stats          = $leaderboard['stats'] ?? array();
+    $bestRecipeDesc = !empty($settingsAdv['best_recipe_desc']) ? (string)$settingsAdv['best_recipe_desc'] : '';
+
+    // Batch cleanup, prediction summary, draw results - restricted to active/matched IDs
+    $batchCleanup      = mleAdvisoryBuildBatchCleanupRecommendation($db, $userId, $lotteryId, $matchedPerfIds);
+    $predictionSummary = mleAdvisoryBuildPredictionSummary($db, $userId, $lotteryId, $topMethodLabel, $bestRecipeDesc, $activeRunIds);
+    $drawResults       = mleAdvisoryLoadPerLotteryDrawResults($db, $userId, $lotteryId, $activeRunIds);
+
+    return array(
+        'lottery_id'         => $lotteryId,
+        'lottery_name'       => $lotteryName,
+        'has_data'           => true,
+        'top_method'         => $topMethod,
+        'leaderboard'        => $methods,
+        'method_opinions'    => $methodOpinions,
+        'settings_advice'    => $settingsAdv,
+        'proof_level'        => $proofLevel,
+        'next_step'          => $nextStep,
+        'what_to_do'         => $whatToDo,
+        'decision'           => $decision,
+        'why_support'        => $whySupport,
+        'base_run_id'        => $baseRunId,
+        'stats'              => array('total_runs' => (int)($stats['total_runs'] ?? 0), 'completed_draws' => (int)($stats['total_draws'] ?? 0), 'active_methods' => (int)($stats['method_count'] ?? 0)),
+        'batch_cleanup'      => ($batchCleanup['has_recommendation'] ?? false) ? $batchCleanup : null,
+        'prediction_summary' => $predictionSummary,
+        'draw_results'       => $drawResults,
+    );
 }
 
 function mleAdvisoryLoadAllLotteryCards($db, $userId) {
@@ -4161,28 +4495,20 @@ function mleAdvisoryLoadAllLotteryCards($db, $userId) {
     // Step 2: attach performance rows only where they match active saved runs
     $perfByLottery = mleAdvisoryAttachPerformanceToActiveEvidence($db, $userId, $activeByLottery);
 
-    // Step 3: build a card for each lottery that has at least one matched performance row
+    // Step 3: build one card per active lottery using only active evidence and matched perf rows
     $cards = array();
     foreach ($activeByLottery as $lid => $ldata) {
-        // Only build a card if there is at least one performance row tied to an active saved run
-        if (empty($perfByLottery[$lid])) { continue; }
         $lname = (string)($ldata['lottery_name'] ?? '');
-        // Resolve lottery name from matched performance rows if not set
+        $matchedPerf = (array)($perfByLottery[$lid] ?? array());
+        // Resolve lottery name from matched performance rows when not stored on saved run
         if ($lname === '') {
-            foreach ($perfByLottery[$lid] as $pr) {
+            foreach ($matchedPerf as $pr) {
                 if (!empty($pr['lottery_name'])) { $lname = (string)$pr['lottery_name']; break; }
             }
         }
-        // Fallback: query lottery table if available
-        if ($lname === '') {
-            try {
-                $pfx = $db->getPrefix();
-                $db->setQuery("SELECT `lottery_name` FROM `" . $pfx . "skai_learning_performance` WHERE `user_id` = {$userId} AND (`lottery_id` = {$lid} OR `target_lottery_id` = {$lid}) LIMIT 1");
-                $nr = $db->loadResult();
-                if ($nr) { $lname = (string)$nr; }
-            } catch (\Throwable $e) {}
-        }
-        $card = mleAdvisoryBuildLotteryCard($db, $userId, (int)$lid, $lname);
+        // Skip lotteries that have no matched performance rows - nothing to advise on yet
+        if (empty($matchedPerf)) { continue; }
+        $card = mleAdvisoryBuildLotteryCardFromEvidence($db, $userId, (int)$lid, $lname, $ldata, $matchedPerf);
         if ($card['has_data']) { $cards[] = $card; }
     }
     return array('has_any_data' => !empty($cards), 'cards' => $cards, 'total_lotteries' => count($cards));
@@ -4731,12 +5057,36 @@ if ($__mleAction === 'apply_evidence_choices') {
     mleAdvisoryEnsureSchemaColumns($db);
     $prefix    = $db->getPrefix();
     $perfTable = $db->quoteName($prefix . 'skai_learning_performance');
+    $snTable   = $db->quoteName($prefix . 'user_saved_numbers');
     $updated   = 0;
+
+    // Helper: also sync advice_status to user_saved_numbers via run_id
+    $__mleApplySavedNumbersStatus = function($perfId, $status) use ($db, $prefix, $workspaceUserId, $snTable) {
+        try {
+            $rawPerf = $db->getPrefix() . 'skai_learning_performance';
+            $db->setQuery("SELECT `run_id` FROM `{$rawPerf}` WHERE `id` = " . (int)$perfId . " AND `user_id` = " . (int)$workspaceUserId . " LIMIT 1");
+            $runId = (int)$db->loadResult();
+            if ($runId <= 0) { return; }
+            // Only update if advice_status column exists on user_saved_numbers
+            $snColsRaw = $db->getTableColumns('#__user_saved_numbers', false);
+            $snCols = is_array($snColsRaw) ? array_keys($snColsRaw) : array();
+            if (!in_array('advice_status', $snCols, true)) { return; }
+            $q2 = $db->getQuery(true)
+                ->update($snTable)
+                ->set($db->quoteName('advice_status') . ' = ' . $db->quote($status))
+                ->where($db->quoteName('id') . ' = ' . $runId)
+                ->where($db->quoteName('user_id') . ' = ' . (int)$workspaceUserId);
+            $db->setQuery($q2);
+            $db->execute();
+        } catch (\Throwable $e) {}
+    };
+
     foreach ($__advKeepIds as $kid) {
         if ($kid <= 0) { continue; }
         try {
             $q = $db->getQuery(true)->update($perfTable)->set($db->quoteName('advice_status') . ' = ' . $db->quote('use_in_advice'))->where($db->quoteName('id') . ' = ' . $kid)->where($db->quoteName('user_id') . ' = ' . $workspaceUserId);
             $db->setQuery($q); $db->execute(); $updated++;
+            $__mleApplySavedNumbersStatus($kid, 'use_in_advice');
         } catch (\Throwable $e) {}
     }
     foreach ($__advWatchIds as $wid) {
@@ -4744,6 +5094,7 @@ if ($__mleAction === 'apply_evidence_choices') {
         try {
             $q = $db->getQuery(true)->update($perfTable)->set($db->quoteName('advice_status') . ' = ' . $db->quote('watch'))->where($db->quoteName('id') . ' = ' . $wid)->where($db->quoteName('user_id') . ' = ' . $workspaceUserId);
             $db->setQuery($q); $db->execute(); $updated++;
+            $__mleApplySavedNumbersStatus($wid, 'watch');
         } catch (\Throwable $e) {}
     }
     foreach ($__advRetireIds as $rid) {
@@ -4751,6 +5102,7 @@ if ($__mleAction === 'apply_evidence_choices') {
         try {
             $q = $db->getQuery(true)->update($perfTable)->set($db->quoteName('advice_status') . ' = ' . $db->quote('retired'))->where($db->quoteName('id') . ' = ' . $rid)->where($db->quoteName('user_id') . ' = ' . $workspaceUserId);
             $db->setQuery($q); $db->execute(); $updated++;
+            $__mleApplySavedNumbersStatus($rid, 'retired');
         } catch (\Throwable $e) {}
     }
     $app->enqueueMessage('Evidence choices applied. ' . $updated . ' runs updated.', 'message');
@@ -11315,63 +11667,7 @@ if (!empty($__mleMessages)): ?>
   </div>
 </div>
 
-<!-- -- How This Works: Building your advisory history ------------------- -->
-<div class="mle-start-here" role="region" aria-label="How to use this workspace" style="margin-top:1.5rem">
-
-  <div class="mle-start-here__header">
-    <div class="mle-start-here__header-left">
-      <div class="mle-start-here__eyebrow">How this works</div>
-      <h3 class="mle-start-here__title">Building your advisory history</h3>
-      <p class="mle-start-here__subtitle">Save predictions, let them reach their draw date, and LottoExpert will turn the results into advice.</p>
-    </div>
-    <span class="mle-start-here__badge">Beginner-friendly</span>
-  </div>
-
-  <div class="mle-start-here__body">
-
-    <div class="mle-start-here__steps">
-
-      <div class="mle-start-here__step">
-        <div class="mle-start-here__step-num">1</div>
-        <div class="mle-start-here__step-body">
-          <strong>Run a prediction for a lottery</strong>
-          <span>Use any analysis method: SKAI, AI, Skip/Hit, MCMC, or Frequency. Save the result.</span>
-        </div>
-      </div>
-
-      <div class="mle-start-here__step">
-        <div class="mle-start-here__step-num">2</div>
-        <div class="mle-start-here__step-body">
-          <strong>Wait for the draw and record the result</strong>
-          <span>After the official draw, enter the winning numbers. LottoExpert scores your saved prediction against it.</span>
-        </div>
-      </div>
-
-      <div class="mle-start-here__step">
-        <div class="mle-start-here__step-num">3</div>
-        <div class="mle-start-here__step-body">
-          <strong>Let the advice build up</strong>
-          <span>After 3 or more scored draws, LottoExpert will tell you which method is working best and what to try next. The more draws you complete, the stronger the advice becomes.</span>
-        </div>
-      </div>
-
-    </div>
-
-    <div class="mle-start-here__tip">
-      <div class="mle-start-here__tip-icon">Tip:</div>
-      <div class="mle-start-here__tip-body">
-        <strong>One lottery at a time</strong>
-        <span>Focus on one lottery until you have at least 5 completed draws. That gives LottoExpert enough evidence to give you a reliable recommendation.</span>
-      </div>
-    </div>
-
-    <div class="mle-start-here__advanced">
-      <strong>For power users:</strong> once you have scored runs, use the Ranking Performance, Setup Performance Review, and Draw Results Comparison panels further down to review individual draw details.
-    </div>
-
-  </div>
-</div>
-<!-- -- End How This Works ------------------------------------------------ -->
+<?php /* Duplicate onboarding section removed - "How Your Workspace Works" below serves as the single guide section */ ?>
 <!-- -- How Your Workspace Works: workspace context and progress ---------- -->
 
 <?php
@@ -11847,7 +12143,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
         <span class="mle-adv-meta-item"><span class="mle-adv-meta-label">Based on:</span> <?php echo htmlspecialchars($__advBasedOn, ENT_QUOTES, 'UTF-8'); ?></span>
       </div>
     </div>
-    <button type="button" class="mle-lottery-advice-toggle" aria-expanded="false" aria-controls="<?php echo $__advBodyId; ?>"><span>Expand</span></button>
+    <button type="button" class="mle-lottery-toggle" aria-expanded="false" aria-controls="<?php echo $__advBodyId; ?>"><span>Expand</span></button>
   </div>
 
   <!-- Expanded body: hidden by default, revealed on click -->
@@ -12304,7 +12600,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
       btn = btn.parentNode;
     }
     if (!btn || !btn.classList) { return; }
-    if (btn.classList.contains('mle-lottery-advice-toggle')) { mleAdvToggleCard(btn); }
+    if (btn.classList.contains('mle-lottery-toggle')) { mleAdvToggleCard(btn); }
     if (btn.classList.contains('mle-section-toggle')) {
       var bodyId = btn.getAttribute('aria-controls');
       var body = bodyId ? document.getElementById(bodyId) : null;
@@ -21421,8 +21717,8 @@ $__mleWheelFavCsrfField   = '<input type="hidden" name="' . htmlspecialchars($__
 .mle-adv-meta-sep{color:#d1d5e8;flex-shrink:0}
 .mle-adv-expand-btn{display:inline-flex;align-items:center;font-size:.78rem;font-weight:700;padding:.35rem .85rem;border-radius:.375rem;border:1px solid #1C66FF;background:#fff;color:#1C66FF;cursor:pointer;white-space:nowrap;flex-shrink:0}
 .mle-adv-expand-btn:hover{background:#1C66FF;color:#fff}
-.mle-lottery-advice-toggle{display:inline-flex;align-items:center;font-size:.78rem;font-weight:700;padding:.35rem .85rem;border-radius:.375rem;border:1px solid #1C66FF;background:#fff;color:#1C66FF;cursor:pointer;white-space:nowrap;flex-shrink:0}
-.mle-lottery-advice-toggle:hover{background:#1C66FF;color:#fff}
+.mle-lottery-toggle{display:inline-flex;align-items:center;font-size:.78rem;font-weight:700;padding:.35rem .85rem;border-radius:.375rem;border:1px solid #1C66FF;background:#fff;color:#1C66FF;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.mle-lottery-toggle:hover{background:#1C66FF;color:#fff}
 .mle-advisory-card__body{padding:1.25rem 1.35rem;border-top:1px solid #EFEFF5}
 /* Proof badge */
 .mle-proof-badge{display:inline-block;font-size:.72rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:.25rem .6rem;border-radius:1rem;white-space:nowrap}
@@ -21541,7 +21837,7 @@ html[data-mle-mode="advanced"] .mle-nonadvanced-only{display:none !important}
 .mle-adv-run-item--keep .mle-adv-run-item__status{background:#d1fae5;color:#065f46}
 .mle-adv-run-item--watch .mle-adv-run-item__status{background:#fef3c7;color:#92400e}
 .mle-adv-run-item--retire .mle-adv-run-item__status{background:#fee2e2;color:#991b1b}
-@media(max-width:640px){.mle-advisory-card__collapsed{flex-direction:column;align-items:flex-start}.mle-adv-expand-btn{align-self:flex-start}.mle-lottery-advice-toggle{align-self:flex-start}.mle-adv-row{flex-direction:column;gap:.2rem}.mle-adv-row__label{min-width:0}.mle-leaderboard__meta{display:none}.mle-adv-cta-panel{padding:.85rem}.mle-advisory-card__collapsed-meta{flex-direction:column;align-items:flex-start;gap:.2rem}.mle-adv-meta-sep{display:none}.mle-adv-pred-summary__grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:640px){.mle-advisory-card__collapsed{flex-direction:column;align-items:flex-start}.mle-adv-expand-btn{align-self:flex-start}.mle-lottery-toggle{align-self:flex-start}.mle-adv-row{flex-direction:column;gap:.2rem}.mle-adv-row__label{min-width:0}.mle-leaderboard__meta{display:none}.mle-adv-cta-panel{padding:.85rem}.mle-advisory-card__collapsed-meta{flex-direction:column;align-items:flex-start;gap:.2rem}.mle-adv-meta-sep{display:none}.mle-adv-pred-summary__grid{grid-template-columns:repeat(2,1fr)}}
 .mle-adv-section-collapse{border-top:1px solid #EFEFF5;padding-top:.6rem}
 .mle-section-toggle{display:inline-flex;align-items:center;gap:.35rem;font-size:.8rem;font-weight:700;padding:.3rem .7rem;border-radius:.375rem;border:1px solid #dbe4f0;background:#f8fafc;color:#334155;cursor:pointer;white-space:nowrap}
 .mle-section-toggle:hover{background:#EFEFF5}
