@@ -3710,14 +3710,44 @@ function mleAdvisoryBuildBatchCleanupRecommendation($db, $userId, $lotteryId, ar
         $safeIds = implode(',', array_map('intval', $restrictPerfIds));
         $perfRestrict = " AND `id` IN ({$safeIds})";
     }
+    // Check whether advice_status column exists on skai_learning_performance.
+    // If it does, skip any draw date where the user has already applied evidence choices
+    // (at least one row has advice_status = 'watch' or 'retired').  This prevents the
+    // panel from re-appearing after "Use These Evidence Choices" was submitted.
+    $__bcrHasAdviceStatus = false;
     try {
-        $db->setQuery("SELECT `draw_date`, COUNT(*) AS run_count FROM {$perfTable} WHERE `user_id` = {$userId} AND (`lottery_id` = {$lotteryId} OR `target_lottery_id` = {$lotteryId}) AND `avg_winning_rank` IS NOT NULL{$perfRestrict} GROUP BY `draw_date` HAVING COUNT(*) >= 9 ORDER BY `draw_date` DESC LIMIT 1");
+        $__bcrPfxCheck = $db->getPrefix();
+        $db->setQuery("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = " . $db->quote($__bcrPfxCheck . 'skai_learning_performance') . " AND COLUMN_NAME = 'advice_status'");
+        $__bcrHasAdviceStatus = ((int)$db->loadResult() > 0 || $db->loadResult() !== null);
+    } catch (\Throwable $e) {}
+    // Re-check cleanly
+    $__bcrHasAdviceStatus = false;
+    try {
+        $__bcrPfxCheck2 = $db->getPrefix();
+        $db->setQuery("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = " . $db->quote($__bcrPfxCheck2 . 'skai_learning_performance') . " AND COLUMN_NAME = 'advice_status'");
+        $__bcrHasAdviceStatus = ((int)$db->loadResult() > 0);
+    } catch (\Throwable $e) {}
+    // Build HAVING clause to exclude draw dates that were already reviewed.
+    // A draw date is considered already reviewed when ANY row in it has
+    // advice_status set to a non-default value (watch, retired, learning_only, orphaned).
+    $__bcrHaving = 'COUNT(*) >= 9';
+    if ($__bcrHasAdviceStatus) {
+        $__bcrHaving .= " AND SUM(CASE WHEN `advice_status` IN ('watch','retired','learning_only','orphaned') THEN 1 ELSE 0 END) = 0";
+    }
+    try {
+        $db->setQuery("SELECT `draw_date`, COUNT(*) AS run_count FROM {$perfTable} WHERE `user_id` = {$userId} AND (`lottery_id` = {$lotteryId} OR `target_lottery_id` = {$lotteryId}) AND `avg_winning_rank` IS NOT NULL{$perfRestrict} GROUP BY `draw_date` HAVING {$__bcrHaving} ORDER BY `draw_date` DESC LIMIT 1");
         $drawRow = $db->loadAssoc();
     } catch (\Throwable $e) { return $noRec; }
     if (empty($drawRow)) { return $noRec; }
     $drawDate = (string)$drawRow['draw_date'];
+    // Build advice_status filter for the run-level query so already-categorised rows
+    // are not included in the set that we present to the user again.
+    $__bcrRunStatusFilter = '';
+    if ($__bcrHasAdviceStatus) {
+        $__bcrRunStatusFilter = " AND (`advice_status` IS NULL OR `advice_status` NOT IN ('watch','retired','learning_only','orphaned'))";
+    }
     try {
-        $db->setQuery("SELECT slp.`id`, slp.`run_id`, slp.`source`, slp.`top10_hits`, slp.`top20_hits`, slp.`avg_winning_rank`, slp.`missing_hits_count`, slp.`weighted_quality_score` FROM {$perfTable} slp WHERE slp.`user_id` = {$userId} AND (slp.`lottery_id` = {$lotteryId} OR slp.`target_lottery_id` = {$lotteryId}) AND slp.`draw_date` = " . $db->quote($drawDate) . " AND slp.`avg_winning_rank` IS NOT NULL{$perfRestrict} ORDER BY slp.`top10_hits` DESC, slp.`avg_winning_rank` ASC");
+        $db->setQuery("SELECT slp.`id`, slp.`run_id`, slp.`source`, slp.`top10_hits`, slp.`top20_hits`, slp.`avg_winning_rank`, slp.`missing_hits_count`, slp.`weighted_quality_score` FROM {$perfTable} slp WHERE slp.`user_id` = {$userId} AND (slp.`lottery_id` = {$lotteryId} OR slp.`target_lottery_id` = {$lotteryId}) AND slp.`draw_date` = " . $db->quote($drawDate) . " AND slp.`avg_winning_rank` IS NOT NULL{$perfRestrict}{$__bcrRunStatusFilter} ORDER BY slp.`top10_hits` DESC, slp.`avg_winning_rank` ASC");
         $runs = $db->loadAssocList() ?: array();
     } catch (\Throwable $e) { return $noRec; }
     if (count($runs) < 9) { return $noRec; }
@@ -5105,16 +5135,35 @@ if ($__mleAction === 'save_advisory_recipe') {
         $colsRaw = $db->getTableColumns('#__user_saved_settings', false);
         $__advSettingsCols = is_array($colsRaw) ? array_keys($colsRaw) : array();
     } catch (\Throwable $e) {}
-    $insertQ = $db->getQuery(true)
-        ->insert($db->quoteName('#__user_saved_settings'))
-        ->columns(array($db->quoteName('user_id'), $db->quoteName('lottery_id'), $db->quoteName('label'), $db->quoteName('saved_params'), $db->quoteName('date_saved')))
-        ->values(array($workspaceUserId, $__advLotteryId, $db->quote($__advRecipeName), $db->quote(json_encode($__advParams, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)), $db->quote(date('Y-m-d H:i:s'))));
+    // Build all columns and values as arrays first, then do a single INSERT call.
+    // Calling ->values() multiple times in Joomla adds multiple INSERT rows which
+    // produces invalid SQL when column counts differ. Passing an array to ->values()
+    // throws a TypeError in PHP 8.x because the method signature expects a string.
+    $__advInsertCols = array(
+        $db->quoteName('user_id'),
+        $db->quoteName('lottery_id'),
+        $db->quoteName('label'),
+        $db->quoteName('saved_params'),
+        $db->quoteName('date_saved'),
+    );
+    $__advInsertVals = array(
+        (int)$workspaceUserId,
+        (int)$__advLotteryId,
+        $db->quote($__advRecipeName),
+        $db->quote(json_encode($__advParams, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)),
+        $db->quote(date('Y-m-d H:i:s')),
+    );
     $advColMap = array('advisory_reason' => $__advReason, 'advisory_old_value' => $__advOldValue, 'advisory_new_value' => $__advNewValue, 'advisory_setting_key' => $__advSettingKey, 'advisory_proof_level' => $__advProofLabel, 'advisory_method' => $__advMethod);
     foreach ($advColMap as $col => $val) {
         if (in_array($col, $__advSettingsCols, true)) {
-            $insertQ->columns($db->quoteName($col))->values($db->quote((string)$val));
+            $__advInsertCols[] = $db->quoteName($col);
+            $__advInsertVals[] = $db->quote((string)$val);
         }
     }
+    $insertQ = $db->getQuery(true)
+        ->insert($db->quoteName('#__user_saved_settings'))
+        ->columns($__advInsertCols)
+        ->values(implode(',', $__advInsertVals));
     try {
         $db->setQuery($insertQ);
         $db->execute();
