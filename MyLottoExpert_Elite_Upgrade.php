@@ -12328,7 +12328,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
       <p class="mle-adv-pred-summary__reason"><?php echo $__advPSReason; ?></p>
       <?php endif; ?>
       <?php if (!empty($__advPSRuns)): ?>
-      <button type="button" class="mle-advisory-btn mle-advisory-btn--ghost mle-section-toggle" aria-expanded="false" aria-controls="<?php echo $__advRunsBodyId; ?>"><span>View saved runs</span></button>
+      <button type="button" class="mle-advisory-btn mle-advisory-btn--ghost mle-section-toggle" aria-expanded="false" aria-controls="<?php echo $__advRunsBodyId; ?>"><span>Show saved runs</span></button>
       <div id="<?php echo $__advRunsBodyId; ?>" class="mle-adv-runs-list" style="display:none;margin-top:.5rem" aria-hidden="true">
         <?php foreach ($__advPSRuns as $__advPSRun):
           $__psrId     = (int)($__advPSRun['id']        ?? 0);
@@ -12358,7 +12358,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
       $__advClReview = (array)($__advBClean['review'] ?? array());
       $__advClRetire = (array)($__advBClean['retire'] ?? array());
     ?>
-    <div class="mle-batch-cleanup" style="margin-top:.75rem">
+    <div class="mle-batch-cleanup" id="mle-evidence-panel-<?php echo $__advLid; ?>" style="margin-top:.75rem">
       <div class="mle-batch-cleanup__title">Keep the Best Evidence</div>
       <p class="mle-batch-cleanup__body">You ran several predictions for this draw. LottoExpert found the runs that teach us the most. Keeping the strongest evidence helps future advice stay clean.</p>
       <p class="mle-batch-cleanup__note">Retiring does not delete the prediction. It keeps the record but removes it from future advice calculations.</p>
@@ -12446,8 +12446,8 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
         <?php foreach ($__advClRetire as $__advR): ?><input type="hidden" name="retire_ids[]" value="<?php echo (int)($__advR['id'] ?? 0); ?>"><?php endforeach; ?>
         <?php echo \Joomla\CMS\HTML\HTMLHelper::_('form.token'); ?>
         <button type="submit" class="mle-advisory-btn mle-advisory-btn--primary">Use These Evidence Choices</button>
-        <button type="button" class="mle-advisory-btn mle-advisory-btn--secondary mle-adv-review-runs-btn" data-cleanup-lid="<?php echo $__advLid; ?>">Review Runs</button>
-        <button type="button" class="mle-advisory-btn mle-advisory-btn--ghost mle-adv-leave-as-is-btn" data-cleanup-lid="<?php echo $__advLid; ?>">Leave as is</button>
+        <button type="button" class="mle-advisory-btn mle-advisory-btn--secondary mle-review-runs-btn" data-target-panel="<?php echo $__advSPBodyId; ?>">Review Runs</button>
+        <button type="button" class="mle-advisory-btn mle-advisory-btn--ghost mle-leave-as-is-btn" data-target-panel="mle-evidence-panel-<?php echo $__advLid; ?>">Leave as is</button>
       </form>
       <?php endif; ?>
     </div>
@@ -12541,7 +12541,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
     <?php if (!empty($__advSPRuns)): ?>
     <div class="mle-adv-section-collapse" style="margin-top:.75rem">
       <button type="button" class="mle-section-toggle" aria-expanded="false" aria-controls="<?php echo $__advSPBodyId; ?>">
-        <span>View Saved Predictions</span>
+        <span>Show Saved Predictions</span>
       </button>
       <div id="<?php echo $__advSPBodyId; ?>" class="mle-section-body" style="display:none">
         <p class="mle-adv-section-desc">Individual saved prediction runs for this lottery. Each row shows the method, date saved, and evidence status.</p>
@@ -12631,31 +12631,36 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
     var body = bodyId ? document.getElementById(bodyId) : null;
     if (!body) { return; }
     var isExpanded = body.style.display !== 'none';
+    var span = btn.querySelector('span');
     if (isExpanded) {
       body.style.display = 'none';
       body.setAttribute('aria-hidden', 'true');
       btn.setAttribute('aria-expanded', 'false');
-      btn.textContent = 'Expand';
+      if (span) { span.textContent = 'Expand'; } else { btn.textContent = 'Expand'; }
     } else {
       body.style.display = 'block';
       body.setAttribute('aria-hidden', 'false');
       btn.setAttribute('aria-expanded', 'true');
-      btn.textContent = 'Collapse';
+      if (span) { span.textContent = 'Collapse'; } else { btn.textContent = 'Collapse'; }
     }
   }
   function mleAdvReviewRuns(btn) {
-    var lid = btn.getAttribute('data-cleanup-lid');
-    var card = document.getElementById('mle-adv-card-' + lid);
-    if (!card) { return; }
-    var reviewDetail = card.querySelector('.mle-batch-cleanup__run-detail--review');
-    if (reviewDetail) { reviewDetail.scrollIntoView({behavior: 'smooth', block: 'nearest'}); }
+    var panelId = btn.getAttribute('data-target-panel');
+    if (!panelId) { return; }
+    var panel = document.getElementById(panelId);
+    if (!panel) { return; }
+    panel.style.display = 'block';
+    panel.setAttribute('aria-hidden', 'false');
+    var toggleId = panel.getAttribute('aria-labelledby') || '';
+    var toggleBtn = document.querySelector('[aria-controls="' + panelId + '"]');
+    if (toggleBtn) { toggleBtn.setAttribute('aria-expanded', 'true'); }
+    if (panel.scrollIntoView) { panel.scrollIntoView({behavior: 'smooth', block: 'nearest'}); }
   }
   function mleAdvLeaveAsIs(btn) {
-    var lid = btn.getAttribute('data-cleanup-lid');
-    var card = document.getElementById('mle-adv-card-' + lid);
-    if (!card) { return; }
-    var cleanup = card.querySelector('.mle-batch-cleanup');
-    if (cleanup) { cleanup.style.display = 'none'; }
+    var panelId = btn.getAttribute('data-target-panel');
+    if (!panelId) { return; }
+    var panel = document.getElementById(panelId);
+    if (panel) { panel.style.display = 'none'; }
   }
   document.addEventListener('click', function(e) {
     var t = e.target;
@@ -12679,11 +12684,10 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
         var txt = span.textContent || '';
         if (txt.indexOf('Show ') === 0) { span.textContent = txt.replace('Show ', 'Hide '); }
         else if (txt.indexOf('Hide ') === 0) { span.textContent = txt.replace('Hide ', 'Show '); }
-        else if (txt.indexOf('View ') === 0) { span.textContent = hidden ? txt.replace('View ', 'Hide ') : txt; }
       }
     }
-    if (btn.classList.contains('mle-adv-review-runs-btn')) { mleAdvReviewRuns(btn); }
-    if (btn.classList.contains('mle-adv-leave-as-is-btn')) { mleAdvLeaveAsIs(btn); }
+    if (btn.classList.contains('mle-review-runs-btn')) { mleAdvReviewRuns(btn); }
+    if (btn.classList.contains('mle-leave-as-is-btn')) { mleAdvLeaveAsIs(btn); }
   });
 }());
 </script>
