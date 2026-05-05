@@ -4144,10 +4144,12 @@ function mleAdvisoryLoadActiveSavedEvidence($db, $userId) {
     if (in_array('save_intent', $snCols, true)) {
         // prediction_archive may be how saved predictions are stored - do NOT exclude it here.
         // Only exclude rows explicitly marked as non-active evidence.
-        $filterParts[] = "`save_intent` NOT IN ('retired','archived','deleted','learning_only','orphaned')";
+        // NULL guard is required: in MySQL, NULL NOT IN (...) evaluates to NULL (falsy), which
+        // would incorrectly exclude rows with no save_intent set.
+        $filterParts[] = "(`save_intent` IS NULL OR `save_intent` NOT IN ('retired','archived','deleted','learning_only','orphaned'))";
     }
     if (in_array('advice_status', $snCols, true)) {
-        $filterParts[] = "(`advice_status` IS NULL OR `advice_status` NOT IN ('retired','archived','learning_only','orphaned'))";
+        $filterParts[] = "(`advice_status` IS NULL OR `advice_status` NOT IN ('retired','deleted','archived','learning_only','orphaned'))";
     }
     if (in_array('play_status', $snCols, true)) {
         $filterParts[] = "(`play_status` IS NULL OR `play_status` NOT IN ('deleted','archived','retired'))";
@@ -4941,9 +4943,25 @@ if ($__mleAction === 'save_advisory_recipe') {
             $__advSourceList = implode(',', array_map(function($s) use ($db) { return $db->quote($s); }, $__advSources));
             $__advPfx        = $db->getPrefix();
             try {
-                $db->setQuery("SELECT `run_id` FROM `" . $__advPfx . "skai_learning_performance` WHERE `user_id` = {$workspaceUserId} AND (`lottery_id` = {$__advLotteryId} OR `target_lottery_id` = {$__advLotteryId}) AND `source` IN ({$__advSourceList}) AND `avg_winning_rank` IS NOT NULL ORDER BY `weighted_quality_score` DESC, `top10_hits` DESC LIMIT 1");
-                $__advRunRow = $db->loadAssoc();
-                if (!empty($__advRunRow)) { $__advRunId = (int)$__advRunRow['run_id']; }
+                // Restrict to run_ids from user_saved_numbers (active evidence only) to avoid
+                // picking up orphaned performance rows that have no active saved prediction.
+                $__advSnRaw2  = $__advPfx . 'user_saved_numbers';
+                $__advSnCols2 = array();
+                try { $__advSnCols2 = array_keys($db->getTableColumns('#__user_saved_numbers', false)); } catch (\Throwable $e2) {}
+                $__advSnIntentFilter = '';
+                if (in_array('save_intent', $__advSnCols2, true)) {
+                    $__advSnIntentFilter = " AND (`save_intent` IS NULL OR `save_intent` NOT IN ('retired','archived','deleted','learning_only','orphaned'))";
+                }
+                $db->setQuery("SELECT `id` FROM `{$__advSnRaw2}` WHERE `user_id` = {$workspaceUserId} AND `lottery_id` = {$__advLotteryId} AND `id` > 0" . $__advSnIntentFilter . " ORDER BY `id` DESC LIMIT 500");
+                $__advActiveSnIds = $db->loadColumn() ?: array();
+                $__advActiveSnIds = array_map('intval', $__advActiveSnIds);
+                if (empty($__advActiveSnIds)) { $__advRunId = 0; }
+                else {
+                    $__advSnIdList = implode(',', $__advActiveSnIds);
+                    $db->setQuery("SELECT `run_id` FROM `" . $__advPfx . "skai_learning_performance` WHERE `user_id` = {$workspaceUserId} AND `run_id` IN ({$__advSnIdList}) AND `source` IN ({$__advSourceList}) AND `avg_winning_rank` IS NOT NULL ORDER BY `weighted_quality_score` DESC, `top10_hits` DESC LIMIT 1");
+                    $__advRunRow = $db->loadAssoc();
+                    if (!empty($__advRunRow)) { $__advRunId = (int)$__advRunRow['run_id']; }
+                }
             } catch (\Throwable $e) {}
         }
         // Resolve full settings from user_saved_numbers row
