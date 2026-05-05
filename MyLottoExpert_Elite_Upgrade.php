@@ -3438,7 +3438,7 @@ function mleAdvisoryComputeMethodLeaderboard($db, $userId, $lotteryId) {
         $snTblLb = '`' . $pfxLb . 'user_saved_numbers`';
         $snSubLb = $snTblLb . '.`user_id` = ' . $userId . ' AND ' . $snTblLb . '.`lottery_id` = ' . $lotteryId;
         if (in_array('save_intent', $snColsLb, true)) {
-            $snSubLb .= " AND " . $snTblLb . ".`save_intent` NOT IN ('retired','archived','deleted')";
+            $snSubLb .= " AND (" . $snTblLb . ".`save_intent` IS NULL OR " . $snTblLb . ".`save_intent` NOT IN ('retired','archived','deleted','learning_only','orphaned'))";
         }
         $where .= " AND (`run_id` IS NULL OR `run_id` IN (SELECT `id` FROM " . $snTblLb . " WHERE " . $snSubLb . "))";
     }
@@ -3507,6 +3507,53 @@ function mleAdvisoryComputeMethodLeaderboard($db, $userId, $lotteryId) {
         'proof_level' => mleAdvisoryGetProofLevelLabel($totalDraws, $totalRuns, $topPct, $runnerPct),
         'stats'       => array('total_draws' => $totalDraws, 'total_runs' => $totalRuns, 'method_count' => count($scored)),
     );
+}
+
+/**
+ * Find user_saved_numbers IDs that correspond to a given skai_learning_performance row.
+ * Matches by all available identity fields (run_id FK, run_uuid, snapshot_run_uuid,
+ * run_identity_key, prediction_target_id, prediction_target_key).
+ * Returns an array of matching user_saved_numbers IDs (may be empty).
+ */
+function mleAdvisoryFindSavedNumberIdsForPerformanceRow($db, $userId, array $perfRow) {
+    $userId = (int)$userId;
+    if ($userId <= 0 || empty($perfRow)) { return array(); }
+    $snCols = array();
+    try {
+        $raw = $db->getTableColumns('#__user_saved_numbers', false);
+        $snCols = is_array($raw) ? array_keys($raw) : array();
+    } catch (\Throwable $e) { return array(); }
+    $pfx   = $db->getPrefix();
+    $snTbl = '`' . $pfx . 'user_saved_numbers`';
+    $orParts = array();
+    $runId = (int)($perfRow['run_id'] ?? 0);
+    if ($runId > 0) { $orParts[] = '`id` = ' . $runId; }
+    $ruuid = trim((string)($perfRow['run_uuid'] ?? ''));
+    if ($ruuid !== '' && in_array('run_uuid', $snCols, true)) {
+        $orParts[] = '`run_uuid` = ' . $db->quote($ruuid);
+    }
+    $suuid = trim((string)($perfRow['snapshot_run_uuid'] ?? ''));
+    if ($suuid !== '' && in_array('snapshot_run_uuid', $snCols, true)) {
+        $orParts[] = '`snapshot_run_uuid` = ' . $db->quote($suuid);
+    }
+    $rik = trim((string)($perfRow['run_identity_key'] ?? ''));
+    if ($rik !== '' && in_array('run_identity_key', $snCols, true)) {
+        $orParts[] = '`run_identity_key` = ' . $db->quote($rik);
+    }
+    $ptid = trim((string)($perfRow['prediction_target_id'] ?? ''));
+    if ($ptid !== '' && in_array('prediction_target_id', $snCols, true)) {
+        $orParts[] = '`prediction_target_id` = ' . $db->quote($ptid);
+    }
+    $ptkey = trim((string)($perfRow['prediction_target_key'] ?? ''));
+    if ($ptkey !== '' && in_array('prediction_target_key', $snCols, true)) {
+        $orParts[] = '`prediction_target_key` = ' . $db->quote($ptkey);
+    }
+    if (empty($orParts)) { return array(); }
+    try {
+        $db->setQuery("SELECT `id` FROM {$snTbl} WHERE `user_id` = {$userId} AND (" . implode(' OR ', $orParts) . ") LIMIT 50");
+        $ids = $db->loadColumn() ?: array();
+        return array_map('intval', $ids);
+    } catch (\Throwable $e) { return array(); }
 }
 
 function mleAdvisoryComputeSettingsAdvisor($db, $userId, $lotteryId, $method = 'skai', array $restrictPerfIds = array()) {
@@ -3816,7 +3863,9 @@ function mleAdvisoryBuildPredictionSummary($db, $userId, $lotteryId, $topMethodL
     // Build active-run filter
     $activeFilter = '';
     if (in_array('save_intent', $snCols, true)) {
-        $activeFilter = " AND `save_intent` NOT IN ('retired','archived','deleted')";
+        // NULL guard required: NULL NOT IN (...) evaluates to NULL (falsy) in MySQL,
+        // which would incorrectly exclude rows with no save_intent set.
+        $activeFilter = " AND (`save_intent` IS NULL OR `save_intent` NOT IN ('retired','archived','deleted','learning_only','orphaned'))";
     }
     // When restricted to specific run IDs, use those directly
     $runIdFilter = '';
@@ -3934,7 +3983,9 @@ function mleAdvisoryLoadPerLotteryDrawResults($db, $userId, $lotteryId, array $r
 
     $activeFilter = '';
     if (in_array('save_intent', $snCols, true)) {
-        $activeFilter = " AND n.`save_intent` NOT IN ('retired','archived','deleted')";
+        // NULL guard required: NULL NOT IN (...) evaluates to NULL (falsy) in MySQL,
+        // which would incorrectly exclude rows with no save_intent set.
+        $activeFilter = " AND (n.`save_intent` IS NULL OR n.`save_intent` NOT IN ('retired','archived','deleted','learning_only','orphaned'))";
     }
     // Restrict to active run IDs when provided
     $runIdFilter = '';
@@ -4151,6 +4202,9 @@ function mleAdvisoryLoadActiveSavedEvidence($db, $userId) {
     }
     if (in_array('play_status', $snCols, true)) {
         $filterParts[] = "(`play_status` IS NULL OR `play_status` NOT IN ('deleted','archived','retired'))";
+    }
+    if (in_array('status', $snCols, true)) {
+        $filterParts[] = "(`status` IS NULL OR `status` NOT IN ('deleted','archived','retired','learning_only','orphaned'))";
     }
     $activeFilter = !empty($filterParts) ? ' AND ' . implode(' AND ', $filterParts) : '';
 
@@ -5130,6 +5184,21 @@ if ($__mleAction === 'apply_evidence_choices') {
     $__advKeepIds   = array_map('intval', (array)($app->input->post->get('keep_ids',   array(), 'ARRAY')));
     $__advWatchIds  = array_map('intval', (array)($app->input->post->get('watch_ids',  array(), 'ARRAY')));
     $__advRetireIds = array_map('intval', (array)($app->input->post->get('retire_ids', array(), 'ARRAY')));
+    // Validate lottery_id belongs to the current user context
+    $__advEcLotteryId = $app->input->getInt('lottery_id', 0);
+    if ($__advEcLotteryId > 0) {
+        $__advEcOwned = false;
+        try {
+            $__advEcPfx = $db->getPrefix();
+            $db->setQuery("SELECT COUNT(*) FROM `" . $__advEcPfx . "user_saved_numbers` WHERE `user_id` = " . (int)$workspaceUserId . " AND `lottery_id` = " . (int)$__advEcLotteryId . " LIMIT 1");
+            if ((int)$db->loadResult() > 0) { $__advEcOwned = true; }
+        } catch (\Throwable $__advEcE) {}
+        if (!$__advEcOwned) {
+            $app->enqueueMessage('No evidence choices were available to apply for this lottery.', 'notice');
+            $app->redirect(\Joomla\CMS\Uri\Uri::getInstance()->toString());
+            return;
+        }
+    }
     mleAdvisoryEnsureSchemaColumns($db);
     $prefix    = $db->getPrefix();
     $perfTable = $db->quoteName($prefix . 'skai_learning_performance');
@@ -7049,20 +7118,27 @@ if (MLE_DEMO_MODE) {
 #info-card:not(.open) .skai-card__body { display: none; }
 
 #info-toggle {
-  font-size: 0.72rem;
-  font-weight: 700;
+  font-size: .82rem;
+  font-weight: 800;
   color: #0A1A33;
   background: #FFFFFF;
   border: 1px solid rgba(127,141,170,0.35);
-  border-radius: 6px;
-  padding: 3px 10px;
+  border-radius: 999px;
+  padding: 10px 16px;
+  min-height: 44px;
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
 }
 #info-toggle:hover {
   background: #EFEFF5;
   color: #0A1A33;
+}
+#info-toggle:focus {
+  outline: 3px solid rgba(28,102,255,0.35);
+  outline-offset: 2px;
 }
 
 /* Optional: compact switch appearance */
@@ -12553,7 +12629,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
       <button type="button" class="mle-section-toggle" aria-expanded="false" aria-controls="<?php echo $__advDRBodyId; ?>">
         <span>Show Draw Results Comparison</span>
       </button>
-      <div id="<?php echo $__advDRBodyId; ?>" class="mle-section-body" style="display:none">
+      <div id="<?php echo $__advDRBodyId; ?>" class="mle-section-body" style="display:none" aria-hidden="true">
         <p class="mle-adv-section-desc">This shows how your saved predictions compared with the actual completed draw for this lottery.</p>
         <?php foreach ($__advDrawResults as $__drDate => $__drGroup):
           $__drRuns    = (array)($__drGroup['runs']       ?? array());
@@ -12612,7 +12688,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
       <button type="button" class="mle-section-toggle" aria-expanded="false" aria-controls="<?php echo $__advSPBodyId; ?>">
         <span>Show Saved Predictions</span>
       </button>
-      <div id="<?php echo $__advSPBodyId; ?>" class="mle-section-body" style="display:none">
+      <div id="<?php echo $__advSPBodyId; ?>" class="mle-section-body" style="display:none" aria-hidden="true">
         <p class="mle-adv-section-desc">Individual saved prediction runs for this lottery. Each row shows the method, date saved, and evidence status.</p>
         <?php foreach ($__advSPRuns as $__spRun):
           $__spId     = (int)($__spRun['id']        ?? 0);
@@ -21881,8 +21957,8 @@ $__mleWheelFavCsrfField   = '<input type="hidden" name="' . htmlspecialchars($__
 .mle-advisory-card__collapsed-meta{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;font-size:.82rem;color:#7F8DAA}
 .mle-adv-meta-label{font-weight:700;color:#475569}
 .mle-adv-meta-sep{color:#d1d5e8;flex-shrink:0}
-.mle-workspace-guide-toggle,.mle-section-toggle,.mle-lottery-toggle{display:inline-flex;align-items:center;font-size:.82rem;font-weight:800;padding:10px 16px;border-radius:999px;border:1px solid rgba(127,141,170,0.35);background:#FFFFFF;color:#0A1A33;cursor:pointer;white-space:nowrap;min-height:44px;flex-shrink:0}
-.mle-workspace-guide-toggle:hover,.mle-section-toggle:hover,.mle-lottery-toggle:hover{background:#EFEFF5;color:#0A1A33}
+.mle-workspace-guide-toggle,.mle-section-toggle,.mle-lottery-toggle{display:inline-flex;align-items:center;font-size:.82rem;font-weight:800;padding:10px 16px;border-radius:999px;border:1px solid rgba(127,141,170,0.35) !important;background:#FFFFFF !important;color:#0A1A33 !important;cursor:pointer;white-space:nowrap;min-height:44px;flex-shrink:0}
+.mle-workspace-guide-toggle:hover,.mle-section-toggle:hover,.mle-lottery-toggle:hover{background:#EFEFF5 !important;color:#0A1A33 !important}
 .mle-workspace-guide-toggle:focus,.mle-section-toggle:focus,.mle-lottery-toggle:focus{outline:3px solid rgba(28,102,255,0.35);outline-offset:2px}
 .mle-advisory-card__body{padding:1.25rem 1.35rem;border-top:1px solid #EFEFF5}
 /* Proof badge */
