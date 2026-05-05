@@ -1,0 +1,729 @@
+# Master Prompt: Transform MyLottoExpert Into a World-Class Lottery Advisory Command Center
+
+We need to transform the existing **MyLottoExpert** page into an elite, world-class, best-of-the-best lottery decision center for regular users.
+
+The objective is not simply to show predictions, saved runs, settings, or draw results. The objective is to help the user make better lottery decisions using clean, accumulated, evidence-based advice.
+
+The page must become the central place where a user can answer:
+
+> Which lottery should I focus on?
+> Which analysis method is working best for this lottery?
+> Which saved recipe/settings are performing best?
+> What should I keep using?
+> What should I stop using?
+> What one setting should I test next?
+> Which numbers or pools deserve attention?
+> Why is LottoExpert recommending this?
+
+The user should not need to go anywhere else for advice. They should feel that this page is their personal lottery command center.
+
+The user is not a mathematician. The experience must be written in plain English, especially in Beginner Mode. Advanced details can exist, but the main experience must be clean, calm, understandable, and decision-oriented.
+
+The current code already contains many strong foundations, including saved predictions, saved settings, saved play sets, blend display logic, settings capture, performance scoring, draw comparison, setup review, method labels, workspace modes, and SKAI learning performance tables. It already saves many SKAI/AI/MCMC/Skip-Hit settings such as epochs, window size, draws analyzed, auto-tune, Best Window, diversity penalty, sampling temperature, gap scale, blend percentage, training style, and more. It also already treats the SKAI blend display as a **single percentage**, not two complementary percentages. That must remain true. 
+
+The mission now is to reorganize these ingredients into a true advisory system.
+
+---
+
+# 1. Core Product Principle
+
+MyLottoExpert should stop behaving like a technical report and start behaving like an advisor.
+
+The page should not lead with raw saved predictions, technical settings, or draw-by-draw analysis.
+
+It should lead with:
+
+> **What LottoExpert recommends now, based on accumulated evidence.**
+
+Each draw is proof.
+The accumulated lottery history is the advisor.
+
+Individual draw results should feed the overall recommendation. They should not each act like separate mini-advisors.
+
+---
+
+# 2. Main Page Goal
+
+For each lottery, the page should produce one clear advisory summary:
+
+## Best Analysis for This Lottery
+
+This section should answer:
+
+> Based on all valid saved completed runs for this lottery, which analysis method is producing the strongest results?
+
+Possible recommendations:
+
+* SKAI
+* AI
+* Skip/Hit
+* MCMC
+* Heatmap/Frequency, if applicable
+* Combined strategy
+* No clear winner yet
+
+The system must not assume SKAI is always best. If Skip/Hit is outperforming SKAI for a specific lottery, the recommendation should say so. If AI is best, recommend AI. If the evidence is too close, say that clearly.
+
+The user-facing wording should be plain:
+
+> **SKAI is working best right now for this lottery.**
+> Based on your saved completed results, SKAI has produced the strongest overall support. LottoExpert recommends staying with SKAI and improving its settings one step at a time.
+
+Or:
+
+> **Skip/Hit is working best right now for this lottery.**
+> This lottery is responding better to timing and overdue-pattern analysis. LottoExpert recommends using Skip/Hit as the main analysis for the next test.
+
+Or:
+
+> **No clear winner yet.**
+> SKAI and AI are very close. LottoExpert recommends testing both for a few more completed draws before choosing one as the main analysis.
+
+---
+
+# 3. Accumulated Advice, Not Draw-by-Draw Advice
+
+The bottom draw sections currently show each draw individually. That should remain available as proof history, but the main advice should be consolidated.
+
+The main advisory recommendation should be based on all valid saved completed predictions for that lottery.
+
+The page should consolidate:
+
+* all valid saved runs
+* all completed official draw results
+* all saved settings used
+* all method performance
+* all recipe performance
+* all accumulated proof
+
+Then it should produce one lottery-level advisory recommendation.
+
+The individual draw section should be renamed:
+
+## Proof History
+
+Plain explanation:
+
+> These are the individual draw results LottoExpert used to build the recommendation above. You can open them if you want to see the details, but the main advice comes from the full history, not from one draw.
+
+In Beginner Mode, Proof History should be collapsed by default.
+
+---
+
+# 4. Evidence Pool Rules
+
+The advisory system must not use every run blindly.
+
+The advisory engine should only use runs that are:
+
+* saved
+* intentionally kept for advice
+* tied to the correct user
+* tied to the correct lottery
+* tied to a valid completed draw
+* not deleted
+* not retired
+* not marked as excluded from advice
+* not from incomplete official draw results
+* not duplicate noise when a better duplicate exists
+
+The page should support an advice status for each saved run:
+
+| Status        | Meaning                                                              |
+| ------------- | -------------------------------------------------------------------- |
+| Use in Advice | This run helps future recommendations                                |
+| Watch         | Keep for comparison, but do not let it strongly influence advice yet |
+| Retired       | Keep the historical record, but exclude from future advice           |
+| Deleted       | Permanently removed                                                  |
+
+The user should be able to retire weak runs from advice without deleting them.
+
+Use the phrase:
+
+> **Retire from advice**
+
+instead of leading with “delete.”
+
+This protects the historical record while keeping the advisory evidence clean.
+
+---
+
+# 5. Batch Cleanup for Multiple Runs
+
+When a user runs a batch of many predictions for the same lottery and draw — for example, 9 or more runs — LottoExpert should help clean up the evidence after the draw completes.
+
+The goal is to isolate the best performers.
+
+After scoring that draw, show:
+
+## Keep the Best Evidence
+
+Plain explanation:
+
+> You ran several predictions for this draw. LottoExpert recommends keeping only the ones that teach us the most. Keeping too many weak or duplicate runs can confuse future advice. Retiring weaker runs helps LottoExpert focus on the settings that are truly working.
+
+Recommended classifications:
+
+* Keep
+* Watch
+* Retire from advice
+
+Example:
+
+> LottoExpert reviewed 9 saved runs for this draw. Recommendation: keep 2, watch 1, retire 6 from future advice.
+
+Buttons:
+
+* **Keep Recommended Runs**
+* **Review First**
+* **Retire Weak Runs**
+* **Do Nothing**
+
+The cleanup logic should not only keep the run with the most direct hits. It should consider:
+
+* direct hits
+* average winning rank
+* top-10 hits
+* top-20 hits
+* missing count
+* weighted quality score
+* method diversity
+* setting diversity
+* whether the run belongs to the current leading method
+* whether it tested a meaningfully different setting
+
+Always preserve the option to review before applying cleanup.
+
+---
+
+# 6. Best Analysis Method Recommendation
+
+For each lottery, create a method leaderboard that compares:
+
+* SKAI
+* AI
+* Skip/Hit
+* MCMC
+* Heatmap/Frequency, if applicable
+
+The system should compare methods using accumulated valid evidence, not one draw.
+
+Metrics may include:
+
+* valid completed draws tested
+* valid saved runs tested
+* average hits
+* hit consistency
+* average winning rank
+* top-10/top-20 support
+* missing count
+* weighted quality score
+* recent trend
+* best result
+* consistency
+* confidence level
+
+Beginner Mode should not expose all metrics at first. It should show a simple read:
+
+| Analysis | Current Read        | Recommendation       |
+| -------- | ------------------- | -------------------- |
+| SKAI     | Best results so far | Use as main analysis |
+| AI       | Close second        | Keep watching        |
+| Skip/Hit | Useful support      | Use for backup clues |
+| MCMC     | Weak recently       | Do not prioritize    |
+
+Advanced Mode can show the detailed metrics.
+
+If one method is clearly best, the system should recommend staying with that method and optimizing its settings before switching methods.
+
+Example:
+
+> **Best Analysis Right Now: SKAI**
+> SKAI has the strongest accumulated results for this lottery. Stick with SKAI for the next test.
+
+If the evidence favors AI:
+
+> **Best Analysis Right Now: AI**
+> AI has performed better than the other methods for this lottery. LottoExpert recommends using AI as your main analysis and testing small setting changes there.
+
+If evidence favors Skip/Hit:
+
+> **Best Analysis Right Now: Skip/Hit**
+> Skip/Hit is giving the strongest evidence for this lottery. LottoExpert recommends using it as the main analysis for now.
+
+If the evidence is mixed:
+
+> **Close Race**
+> SKAI and AI are very close. Test both for a few more completed draws before choosing one as the main analysis.
+
+---
+
+# 7. Settings Advisor
+
+The Saved Details section should not just show the settings used. It should become a **Settings Advisor**.
+
+The purpose of the Settings Advisor is:
+
+> Look at the accumulated saved completed runs, compare the settings that performed better against the settings that performed worse, and recommend one careful setting test.
+
+The advice must be evidence-based.
+
+Do not give generic advice like:
+
+> Try more epochs.
+
+Instead, say:
+
+> Your stronger saved runs used more Training Cycles than your weaker runs. Try increasing Training Cycles one step.
+
+Or:
+
+> Your stronger saved runs used fewer Training Cycles than your weaker runs. Try reducing Training Cycles one step.
+
+Or:
+
+> Training Cycles do not show a clear pattern yet. Keep them unchanged.
+
+The advisor should know when **not** to recommend a setting change.
+
+---
+
+# 8. Compare Strong Runs vs Weak Runs
+
+For each lottery and method, divide valid saved completed runs into evidence groups:
+
+## Strong Runs
+
+Runs that performed better based on:
+
+* more hits
+* lower average winning rank
+* better weighted score
+* more top-10/top-20 support
+* fewer missing winning numbers
+* stronger consistency
+
+## Weak Runs
+
+Runs that performed worse based on:
+
+* fewer hits
+* higher average winning rank
+* weaker weighted score
+* more missing numbers
+* weaker consistency
+
+Then compare the settings between strong and weak runs.
+
+Example:
+
+| Setting             | Strong Runs | Weak Runs | Meaning                               |
+| ------------------- | ----------: | --------: | ------------------------------------- |
+| History Window      |       35–50 |    80–100 | Smaller windows are doing better      |
+| Training Cycles     |      80–120 |      200+ | Moderate training is doing better     |
+| Spread Control      |   0.35–0.50 |     0.75+ | Tighter number spread is doing better |
+| Blend Setting       |         55% |       75% | 55% area is doing better              |
+| Best History Search |          On | Off/mixed | Keep it on                            |
+
+The recommendation should be based on these comparisons.
+
+---
+
+# 9. One Setting Change at a Time
+
+This is critical.
+
+The Settings Advisor must not recommend changing many important settings at once.
+
+The rule:
+
+> Change one major setting at a time.
+
+Why?
+
+> If we change too many settings at once, LottoExpert cannot tell which change helped or hurt.
+
+Every advisory recipe should preserve the current best recipe and change only one major setting unless the user explicitly chooses otherwise in Advanced Mode.
+
+Beginner Mode must explain this clearly:
+
+> Changing only one setting helps LottoExpert learn what actually improved the result.
+
+---
+
+# 10. Advisory Recipe Creation
+
+The advisory system must provide action buttons.
+
+When LottoExpert recommends a settings change, the user should be able to create a new saved recipe from that advice.
+
+Buttons:
+
+* **Save This Test Recipe**
+* **Try These Settings Next**
+* **Create SKAI Advisory Recipe**
+* **Create AI Advisory Recipe**
+* **Create Skip/Hit Advisory Recipe**
+* **Create MCMC Advisory Recipe**
+* **Show Me the Proof**
+
+The advisory recipe should:
+
+1. use the best current recipe as the base
+2. change only the recommended setting
+3. preserve all other settings
+4. save the evidence reason
+5. identify what changed
+6. identify old value and new value
+7. show the proof level
+8. make it easy to run again
+
+Example saved recipe name:
+
+> 55% Medium Balance — Advisory Test: Smaller History Window
+
+Example confirmation:
+
+> Advisory recipe saved. LottoExpert changed only History Window from 70 to 45 based on stronger completed-run evidence. Everything else stayed the same.
+
+---
+
+# 11. Method-Specific Advisory Recipe Buttons
+
+If accumulated evidence points to SKAI, the primary button should be:
+
+> **Create SKAI Advisory Recipe**
+
+If evidence points to AI:
+
+> **Create AI Advisory Recipe**
+
+If evidence points to Skip/Hit:
+
+> **Create Skip/Hit Advisory Recipe**
+
+If evidence points to MCMC:
+
+> **Create MCMC Advisory Recipe**
+
+If there is no clear winner:
+
+> **Create Test Recipes for Top 2 Methods**
+
+This makes the action match the evidence.
+
+---
+
+# 12. Plain-Language Setting Labels
+
+Beginner Mode must not feel like a technical settings lab.
+
+Use plain labels.
+
+| Technical Setting    | Beginner Label          | Plain Explanation                                                                 |
+| -------------------- | ----------------------- | --------------------------------------------------------------------------------- |
+| Blend percentage     | Blend Setting           | How much LottoExpert leans toward SKAI’s main model when building the prediction. |
+| Epochs               | Training Cycles         | How many times the system studies the draw history before making a prediction.    |
+| Window size          | History Window          | How many past draws LottoExpert looks at.                                         |
+| Draws analyzed       | Past Draws Checked      | How many previous results were reviewed.                                          |
+| Learning rate        | Learning Speed          | How strongly the system adjusts while studying history.                           |
+| Dropout rate         | Overthinking Protection | Helps prevent the system from relying too heavily on one pattern.                 |
+| Hidden layers        | Pattern Depth           | How deeply the system looks for number relationships.                             |
+| Recency decay        | Recent Draw Focus       | How much recent draws matter compared with older draws.                           |
+| Sampling temperature | Variety Level           | Controls whether the prediction stays focused or explores more possibilities.     |
+| Diversity penalty    | Spread Control          | Controls whether numbers stay tighter together or spread out more.                |
+| Gap scale            | Gap Timing              | How strongly the system pays attention to time between appearances.               |
+| Best Window          | Best History Search     | Lets LottoExpert test different history windows and choose the strongest one.     |
+| Auto-tune            | Auto Adjust             | Lets LottoExpert adjust some settings automatically.                              |
+| Top N numbers        | Number Pool Size        | How many candidate numbers LottoExpert keeps near the top.                        |
+| Top N combos         | Combo Pool Size         | How many number combinations LottoExpert keeps for review.                        |
+| Chain length         | Sampling Depth          | How deeply MCMC explores possible number patterns.                                |
+| Burn-in              | Warm-Up Runs            | Early MCMC passes ignored before judging the pattern.                             |
+| Laplace K            | Smoothing Level         | Helps prevent rare patterns from being ignored too quickly.                       |
+| Frequency weight     | Frequency Weight        | How much repeated past appearances matter.                                        |
+| Skip weight          | Skip Timing Weight      | How much overdue-number timing matters.                                           |
+| History weight       | History Weight          | How much long-term draw history matters.                                          |
+
+Advanced Mode can show the technical names. Beginner Mode should show the plain labels.
+
+---
+
+# 13. Single Blend Percentage Rule
+
+The blend must always be shown as one number only.
+
+Correct:
+
+> **Blend Setting: 55%**
+
+Incorrect:
+
+> AI 55% / Skip 45%
+
+The complementary percentage should not be shown to the user because it is confusing and unnecessary. Internally, the system may know the complement, but the interface should show only the saved slider percentage.
+
+The code already supports this principle by building a simple blend label from a single AI-side value and explicitly avoiding display of both sides. 
+
+Beginner Mode wording:
+
+> **Blend Setting: 55%**
+> LottoExpert used a medium-balanced setting for this run.
+
+Advanced Mode may explain:
+
+> Technical meaning: 55% SKAI model influence.
+
+But do not show two percentages.
+
+---
+
+# 14. Beginner Mode Experience
+
+Beginner Mode should answer:
+
+1. What analysis is working best?
+2. What recipe/settings should I use?
+3. What should I try next?
+4. What should I keep the same?
+5. Why is LottoExpert saying this?
+6. How strong is the evidence?
+7. What button should I click?
+
+Recommended Beginner Mode card:
+
+## What This Lottery Is Telling Us
+
+> LottoExpert combines all saved completed results for this lottery and turns them into one clear recommendation.
+
+Example:
+
+> **Best direction right now:** SKAI
+> **Best recipe:** 55% Blend Setting with a medium History Window
+> **What to try next:** Use a slightly smaller History Window
+> **Keep the same:** Blend Setting, Mode, Best History Search, and Auto Adjust
+> **Proof level:** Ready to follow
+> **Based on:** 12 saved runs and 6 completed draws
+
+Buttons:
+
+* **Try These Settings Next**
+* **Save This Recipe**
+* **Show Proof History**
+
+---
+
+# 15. Proof Level Labels
+
+Use friendly evidence labels.
+
+| Evidence Situation      | Beginner Label      | Meaning                                                            |
+| ----------------------- | ------------------- | ------------------------------------------------------------------ |
+| Very little data        | Too Early           | LottoExpert needs more saved completed draws before strong advice. |
+| Some signal             | Early Clue          | Something may be happening, but it is not proven yet.              |
+| Enough to test          | Good Test Candidate | There is enough evidence to try one careful setting change.        |
+| Repeated support        | Strong Pattern      | Several saved completed runs point in the same direction.          |
+| Strong repeated support | Trusted Recipe      | This setting has repeated support across many completed draws.     |
+| Two methods close       | Close Race          | More testing is needed before choosing one winner.                 |
+| Mixed results           | No Clear Winner     | LottoExpert does not have enough agreement yet.                    |
+
+Example:
+
+> **Proof Level: Good Test Candidate**
+> This advice is based on 7 saved completed runs. It is safe to test one small change, but not enough to overhaul everything.
+
+---
+
+# 16. Recommended Page Structure
+
+The page should be reordered around decision-making.
+
+## Top Section: Today’s Advisory Board
+
+One card per lottery.
+
+Each card should include:
+
+* best analysis method
+* best recipe/settings direction
+* recommended next setting test
+* what to keep unchanged
+* proof level
+* based-on count
+* primary action button
+
+Example:
+
+> **Florida Fantasy 5**
+> **Best Analysis:** SKAI
+> **Recommended Recipe:** 55% Blend Setting, Medium History Window, Best History Search on
+> **Next Test:** Smaller History Window
+> **Keep Same:** Blend Setting, Mode, Auto Adjust
+> **Proof Level:** Strong Pattern
+> **Based On:** 18 saved runs across 7 completed draws
+> **Action:** Create SKAI Advisory Recipe
+
+---
+
+## Second Section: Best Analysis for Each Lottery
+
+Method leaderboard by lottery.
+
+Plain-language summary first. Advanced details expandable.
+
+---
+
+## Third Section: Settings Advisor
+
+Shows:
+
+* what settings appear to be helping
+* what settings appear weaker
+* one recommended setting test
+* what to keep unchanged
+* button to save or run advisory recipe
+
+---
+
+## Fourth Section: My Numbers to Play
+
+Final saved play sets and numbers the user is considering.
+
+This should stay practical and action-oriented.
+
+---
+
+## Fifth Section: Proof History
+
+Collapsed by default in Beginner Mode.
+
+Shows the individual completed draw comparisons that built the recommendation.
+
+---
+
+## Sixth Section: Saved Runs and Recipes
+
+Organized archive of saved runs, settings recipes, notes, statuses, and evidence status.
+
+---
+
+## Seventh Section: Advanced Analysis
+
+All technical details:
+
+* rank metrics
+* weighted scores
+* raw settings
+* method-by-method comparison
+* draw-by-draw details
+* saved detail tables
+* technical parameter values
+
+---
+
+# 17. Draw Completeness Validation
+
+Do not score incomplete official draw results.
+
+For a 5-number lottery, if only 4 official numbers are available, the result must not be used in scoring or advice.
+
+User-facing message:
+
+> Official result appears incomplete. LottoExpert is not using this draw for advice yet.
+
+This avoids bad advice from incomplete data.
+
+---
+
+# 18. What the Advisor Should Say
+
+Every recommendation should follow this plain-language structure:
+
+## LottoExpert noticed
+
+> Your stronger saved runs used smaller History Windows.
+
+## Try this next
+
+> Reduce History Window from 70 to 45.
+
+## Keep the same
+
+> Keep Blend Setting, Mode, Best History Search, and Auto Adjust unchanged.
+
+## Why
+
+> Changing one setting at a time helps LottoExpert learn whether that setting actually helped.
+
+## Proof level
+
+> Good Test Candidate — based on 7 saved completed runs.
+
+## Action
+
+> Save This Test Recipe.
+
+---
+
+# 19. When Not to Recommend a Change
+
+The advisor must say “do not change” when evidence is not clear.
+
+Examples:
+
+> Training Cycles do not show a clear pattern yet. Keep them unchanged.
+
+> All saved runs used the same History Window, so LottoExpert cannot tell whether a larger or smaller window would help.
+
+> There are not enough completed saved runs yet. Repeat the current best recipe one more draw before changing settings.
+
+This is important because a world-class advisor does not fake certainty.
+
+---
+
+# 20. Method and Settings Optimization Loop
+
+The full loop should be:
+
+1. User runs predictions.
+2. User saves runs/settings.
+3. Draw completes.
+4. LottoExpert validates official result completeness.
+5. LottoExpert scores valid saved runs.
+6. LottoExpert recommends which runs to keep/watch/retire.
+7. LottoExpert updates accumulated lottery-level advice.
+8. LottoExpert identifies best analysis method.
+9. LottoExpert identifies best recipe/settings direction.
+10. LottoExpert recommends one setting to test.
+11. User saves or runs advisory recipe.
+12. Next draw completes.
+13. LottoExpert scores the advisory recipe.
+14. Advice improves over time.
+
+This is the heart of the elite system.
+
+---
+
+# 21. The Desired User Feeling
+
+The user should feel:
+
+> “I understand what LottoExpert is telling me.”
+> “I know which analysis is working best.”
+> “I know which settings to keep.”
+> “I know what one thing to test next.”
+> “I can trust the advice because it is based on completed draw evidence.”
+> “I do not need to go somewhere else to figure this out.”
+
+The page should be calm, confident, and easy to follow.
+
+---
+
+# 22. Final Product North Star
+
+MyLottoExpert should become:
+
+> **A personal lottery command center that consolidates all saved completed prediction evidence for each lottery, identifies the best-performing analysis method, finds the strongest recipe/settings direction, recommends one careful setting test, explains the reason in plain English, and gives the user buttons to save or run the next advisory recipe.**
+
+Do not build another technical dashboard.
+
+Build the place where the user makes the decision.
