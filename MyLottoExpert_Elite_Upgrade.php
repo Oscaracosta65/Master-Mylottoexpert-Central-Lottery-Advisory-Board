@@ -839,7 +839,7 @@ function mylottoexpertEnsureWheelFavoritesTable($db)
     }
 
     // ---------------------------------------------------------------
-    // 3. The table already exists — load its current column metadata
+    // 3. The table already exists  -  load its current column metadata
     //    once so we can make all subsequent decisions without extra queries.
     // ---------------------------------------------------------------
     try {
@@ -910,11 +910,11 @@ function mylottoexpertEnsureWheelFavoritesTable($db)
     );
     foreach ($legacyDefaults as $colName => $info) {
         if (!isset($colMeta[$colName])) {
-            continue; // column doesn't exist in this installation — skip
+            continue; // column doesn't exist in this installation  -  skip
         }
         // Only modify if the column has no default (IS_NULLABLE='NO' and COLUMN_DEFAULT=null
-        // means a NOT NULL column with no default — inserts that omit it will fail).
-        // Guard: $colMeta entries added in step 4 are sentinel `true`, not arrays —
+        // means a NOT NULL column with no default  -  inserts that omit it will fail).
+        // Guard: $colMeta entries added in step 4 are sentinel `true`, not arrays  - 
         // those are freshly-created columns with explicit DEFAULT values in their DDL,
         // so no MODIFY is needed for them.
         if (!is_array($colMeta[$colName])) {
@@ -1295,7 +1295,7 @@ function mylottoexpertLoadHydratedWheelFavorites($db, $userId)
     $catalog = mylottoexpertLoadEffectiveCatalog($db);
     // Only mark items as missing when the catalog actually loaded.
     // An empty catalog most likely means both sources are temporarily inaccessible,
-    // not that every saved system has been deleted — avoid false "no longer available" messages.
+    // not that every saved system has been deleted  -  avoid false "no longer available" messages.
     $catalogLoaded = !empty($catalog);
     $available = array();
     $missing   = array();
@@ -3837,7 +3837,7 @@ if ($__mleAction === 'save_wheel_favorite') {
     if ($__sysId === '') {
         mylottoexpertJsonResponse(array('ok' => false, 'error' => 'Invalid system ID.'));
     }
-    // Validate system_id against the JSON catalog — but only when the catalog is
+    // Validate system_id against the JSON catalog  -  but only when the catalog is
     // non-empty.  If wheels-index.json is absent or empty we skip validation rather
     // than blocking every save on a temporarily inaccessible file.
     $__saveCatalog = mylottoexpertLoadWheelCatalogFromJson();
@@ -3878,7 +3878,7 @@ if ($__mleAction === 'save_wheel_favorite') {
                 $__insVals[] = $__lv;
             }
         }
-        // INSERT IGNORE — the UNIQUE KEY (uq_user_system) handles duplicate saves
+        // INSERT IGNORE  -  the UNIQUE KEY (uq_user_system) handles duplicate saves
         // atomically without a race-condition-prone SELECT+INSERT pattern.
         $__quotedCols = array_map(function ($c) use ($db) { return $db->quoteName($c); }, $__insCols);
         $db->setQuery(
@@ -3902,7 +3902,7 @@ if ($__mleAction === 'remove_wheel_favorite') {
     // Detect whether this is an AJAX call (Wheeling Systems page) or a plain form POST (dashboard).
     $__isAjax = (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest');
     // Helper: respond correctly for the request type.
-    // AJAX → JSON. Form POST → Joomla flash message + page redirect.
+    // AJAX to JSON. Form POST to Joomla flash message + page redirect.
     $__removeRedirectPath = \Joomla\CMS\Uri\Uri::getInstance()->getPath();
 
     if ($app->input->getMethod() !== 'POST') {
@@ -14930,7 +14930,7 @@ foreach ($bestOpps as $__dLid => $__dOpp) {
             'draw_date' => (string)($__supportRun['draw_date'] ?? ''),
             'hits' => (int)($__supportRun['hits'] ?? 0),
             'avg_rank' => (isset($__supportRun['avg_rank']) && $__supportRun['avg_rank'] !== null && $__supportRun['avg_rank'] !== '') ? round((float)$__supportRun['avg_rank'], 1) : null,
-            'ai_share' => $__supportAiLabel !== '' ? $__supportAiLabel : '—',
+            'ai_share' => $__supportAiLabel !== '' ? $__supportAiLabel : ' - ',
             'training_style' => $__supportTrainingLabel,
             'strategy_family' => (string)($__supportBlendInfo['strategy_label'] ?? 'Unclassified'),
             'source_label' => (string)($__supportDisp['base_label'] ?? '')
@@ -15295,7 +15295,7 @@ usort($__intelligenceCards, function ($a, $b) {
                         <div class="mle-ci-support-item__top">
                           <div>
                             <div class="mle-ci-support-item__title"><?php echo htmlspecialchars((string)$__supportItem['title'], ENT_QUOTES, 'UTF-8'); ?></div>
-                            <div class="mle-ci-panel__text" style="margin-top:0.15rem;"><?php echo htmlspecialchars((string)$__supportItem['strategy_family'], ENT_QUOTES, 'UTF-8'); ?><?php echo !empty($__supportItem['source_label']) ? ' • ' . htmlspecialchars((string)$__supportItem['source_label'], ENT_QUOTES, 'UTF-8') : ''; ?></div>
+                            <div class="mle-ci-panel__text" style="margin-top:0.15rem;"><?php echo htmlspecialchars((string)$__supportItem['strategy_family'], ENT_QUOTES, 'UTF-8'); ?><?php echo !empty($__supportItem['source_label']) ? ' - ' . htmlspecialchars((string)$__supportItem['source_label'], ENT_QUOTES, 'UTF-8') : ''; ?></div>
                           </div>
                           <div class="mle-ci-chip-row" style="margin-bottom:0;">
                             <span class="mle-ci-chip"><?php echo htmlspecialchars((string)($__supportItem['draw_date'] !== '' ? date('M j, Y', strtotime($__supportItem['draw_date'])) : 'Undated'), ENT_QUOTES, 'UTF-8'); ?></span>
@@ -15317,7 +15317,7 @@ usort($__intelligenceCards, function ($a, $b) {
                           <div class="mle-ci-support-item__metric">
                             <span class="mle-ci-support-item__metric-label">Average rank</span>
                             <?php $__supportRankTone = $__mleEliteRankTone($__supportItem['avg_rank']); ?>
-                            <span class="mle-ci-rank-pill <?php echo htmlspecialchars((string)$__supportRankTone['class'], ENT_QUOTES, 'UTF-8'); ?>" title="<?php echo htmlspecialchars((string)$__supportRankTone['label'], ENT_QUOTES, 'UTF-8'); ?>"><?php echo $__supportItem['avg_rank'] !== null ? htmlspecialchars((string)$__supportItem['avg_rank'], ENT_QUOTES, 'UTF-8') : '—'; ?></span>
+                            <span class="mle-ci-rank-pill <?php echo htmlspecialchars((string)$__supportRankTone['class'], ENT_QUOTES, 'UTF-8'); ?>" title="<?php echo htmlspecialchars((string)$__supportRankTone['label'], ENT_QUOTES, 'UTF-8'); ?>"><?php echo $__supportItem['avg_rank'] !== null ? htmlspecialchars((string)$__supportItem['avg_rank'], ENT_QUOTES, 'UTF-8') : ' - '; ?></span>
                           </div>
                         </div>
                       </div>
@@ -15357,8 +15357,8 @@ usort($__intelligenceCards, function ($a, $b) {
                           <td><?php echo htmlspecialchars((string)($__validationRow['draw_date'] !== '' ? date('M j, Y', strtotime($__validationRow['draw_date'])) : 'Undated'), ENT_QUOTES, 'UTF-8'); ?></td>
                           <td><?php echo htmlspecialchars((string)$__validationRow['label'], ENT_QUOTES, 'UTF-8'); ?></td>
                           <td><?php echo (int)$__validationRow['hits']; ?></td>
-                          <td><?php $__validationRankTone = $__mleEliteRankTone($__validationRow['avg_rank']); ?><span class="mle-ci-rank-pill <?php echo htmlspecialchars((string)$__validationRankTone['class'], ENT_QUOTES, 'UTF-8'); ?>" title="<?php echo htmlspecialchars((string)$__validationRankTone['label'], ENT_QUOTES, 'UTF-8'); ?>"><?php echo $__validationRow['avg_rank'] !== null ? htmlspecialchars((string)$__validationRow['avg_rank'], ENT_QUOTES, 'UTF-8') : '—'; ?></span></td>
-                          <td><?php echo $__validationRow['rank_score'] !== null ? htmlspecialchars((string)$__validationRow['rank_score'], ENT_QUOTES, 'UTF-8') : '—'; ?></td>
+                          <td><?php $__validationRankTone = $__mleEliteRankTone($__validationRow['avg_rank']); ?><span class="mle-ci-rank-pill <?php echo htmlspecialchars((string)$__validationRankTone['class'], ENT_QUOTES, 'UTF-8'); ?>" title="<?php echo htmlspecialchars((string)$__validationRankTone['label'], ENT_QUOTES, 'UTF-8'); ?>"><?php echo $__validationRow['avg_rank'] !== null ? htmlspecialchars((string)$__validationRow['avg_rank'], ENT_QUOTES, 'UTF-8') : ' - '; ?></span></td>
+                          <td><?php echo $__validationRow['rank_score'] !== null ? htmlspecialchars((string)$__validationRow['rank_score'], ENT_QUOTES, 'UTF-8') : ' - '; ?></td>
                         </tr>
                       <?php endforeach; ?>
                     </tbody>
@@ -20820,11 +20820,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
   if (!isOpen) {
     card.classList.remove('open');
-    btn.textContent = '\u25BA Expand';
+    btn.textContent = '[+] Expand';
     btn.setAttribute('aria-expanded', 'false');
     btn.setAttribute('aria-label', 'Expand info');
   } else {
-    btn.textContent = '\u25BC Collapse';
+    btn.textContent = '[-] Collapse';
     btn.setAttribute('aria-expanded', 'true');
     btn.setAttribute('aria-label', 'Collapse info');
   }
@@ -20832,7 +20832,7 @@ document.addEventListener('DOMContentLoaded', function() {
   btn.addEventListener('click', function() {
     var open = card.classList.toggle('open');
     try { localStorage.setItem(key, open ? 'true' : 'false'); } catch (e) {}
-    btn.textContent = open ? '\u25BC Collapse' : '\u25BA Expand';
+    btn.textContent = open ? '[-] Collapse' : '[+] Expand';
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
     btn.setAttribute('aria-label', open ? 'Collapse info' : 'Expand info');
   });
@@ -20942,18 +20942,18 @@ function skaiPosture(levelLabel, methodsUsed, overlapScore, evidenceScore){
   evidenceScore = Number(evidenceScore) || 0;
 
   if (1 >= methodsUsed || levelLabel === 'Single-method') {
-    return 'Signal quality is limited because only one method is active \u2014 useful for exploration, but not for agreement.';
+    return 'Signal quality is limited because only one method is active  -  useful for exploration, but not for agreement.';
   }
   if (levelLabel === 'High') {
-    return 'Signal quality looks consistent \u2014 multiple methods are pointing in similar directions.';
+    return 'Signal quality looks consistent  -  multiple methods are pointing in similar directions.';
   }
   if (levelLabel === 'Balanced') {
-    return 'Signal quality is workable \u2014 some agreement exists, with normal uncertainty.';
+    return 'Signal quality is workable  -  some agreement exists, with normal uncertainty.';
   }
   if (overlapScore === 0 && evidenceScore === 0) {
-    return 'Signal quality is early-stage \u2014 treat this run as learning-focused and keep building history.';
+    return 'Signal quality is early-stage  -  treat this run as learning-focused and keep building history.';
   }
-  return 'Signal quality is exploratory \u2014 good for learning patterns, not for precision.';
+  return 'Signal quality is exploratory  -  good for learning patterns, not for precision.';
 }
 function skaiNextSteps(levelLabel, checkedLen, methodsUsed, overlapScore, evidenceScore){
   var steps = [];
@@ -20965,29 +20965,29 @@ function skaiNextSteps(levelLabel, checkedLen, methodsUsed, overlapScore, eviden
 
   if (checkedLen === 1) {
     steps.push('Add one more method so you can measure agreement (not just one viewpoint).');
-    steps.push('Try \u201cCompare All\u201d once \u2014 it helps you see where methods overlap.');
+    steps.push('Try 'Compare All' once  -  it helps you see where methods overlap.');
     return steps;
   }
 
   // Multi-method but no overlap: likely different assumptions/settings
   if (methodsUsed >= 2 && overlapScore === 0) {
-    steps.push('Your selected methods disagree right now. That\u2019s useful \u2014 it means you\u2019re seeing different viewpoints.');
+    steps.push('Your selected methods disagree right now. That's useful  -  it means you're seeing different viewpoints.');
     steps.push('Try adjusting one setting at a time (draw window, epochs/walks, or smoothing), then save a new run.');
-    steps.push('Aim for at least 1\u20132 overlaps before treating anything as a \u201ccore\u201d set.');
+    steps.push('Aim for at least 1-2 overlaps before treating anything as a 'core' set.');
     return steps;
   }
 
   // Some overlap: suggest strengthening evidence
   if (methodsUsed >= 2 && overlapScore > 0 && evidenceScore === 0) {
     steps.push('You have some agreement. Next: build evidence by saving a few more runs so trends can appear.');
-    steps.push('Mix in a few mid-rank numbers (#4\u2013#10) from each method so you\u2019re not all-in on #1 picks.');
+    steps.push('Mix in a few mid-rank numbers (#4-#10) from each method so you're not all-in on #1 picks.');
     return steps;
   }
 
   // Higher quality: suggest stability and iteration discipline
   if (levelLabel === 'High' || levelLabel === 'Balanced') {
     steps.push('This is a reasonable baseline. Keep your core stable and iterate slowly (one setting change per run).');
-    steps.push('After the next draw, use \u201cpost\u201d mode to see which ranks actually hit and tune toward those ranges.');
+    steps.push('After the next draw, use 'post' mode to see which ranks actually hit and tune toward those ranges.');
     return steps;
   }
 
@@ -21121,7 +21121,7 @@ function renderSelectionHeatmap(group, selStats, methods, labelShort, maxMain, c
   html += '\u003c/tbody\u003e\u003c/table\u003e';
 
   if (!hasAnyData) {
-    host.innerHTML = '\u003cp class="sel-hm-placeholder"\u003eNo hit data available for the selected run(s) yet \u2014 results will appear after the draw date has passed.\u003c/p\u003e';
+    host.innerHTML = '\u003cp class="sel-hm-placeholder"\u003eNo hit data available for the selected run(s) yet  -  results will appear after the draw date has passed.\u003c/p\u003e';
     return;
   }
 
@@ -21520,9 +21520,9 @@ numbersDiv.innerHTML =
           if (mains.length === 0 && (reqExtra === 0 || extras.length === 0)) {
             msg = 'Start by clicking numbers above. Build a pool for wheeling or for a single ticket.';
           } else if (meetsTicket) {
-            msg = 'Ready \u2014 this pool can generate tickets. Add more numbers if you are building a larger wheel.';
+            msg = 'Ready  -  this pool can generate tickets. Add more numbers if you are building a larger wheel.';
           } else {
-            msg = 'In progress \u2014 for a standard ticket you typically need at least ' + reqMain + ' mains' +
+            msg = 'In progress  -  for a standard ticket you typically need at least ' + reqMain + ' mains' +
                   (reqExtra ? (' and at least ' + reqExtra + ' ' + (window.extraLabel || 'extra') + (reqExtra === 1 ? '' : 's')) : '') +
                   '. You can still keep building a larger wheel pool.';
           }
@@ -22261,7 +22261,7 @@ if (decisionStrip) {
     } else {
       mainsSlot.innerHTML =
         '\u003cspan class="decision-pill decision-pill-empty"\u003e' +
-        'Not enough history yet \u2014 keep running methods to build a profile.' +
+        'Not enough history yet  -  keep running methods to build a profile.' +
         '\u003c/span\u003e';
     }
   }
@@ -22302,7 +22302,7 @@ if (decisionStrip) {
   // Confidence is locked as Hybrid (Agreement x Historical Validation).
   // The "level" is what changes based on evidence quality.
   var levelLabel = 'Exploratory';
-  var levelNote  = 'Good for exploring ideas \u2014 keep building more history.';
+  var levelNote  = 'Good for exploring ideas  -  keep building more history.';
 
   // Brand-honest single-selection state (no "agreement" possible)
   if (checked.length === 1) {
@@ -22313,14 +22313,14 @@ if (decisionStrip) {
     levelNote  = 'Strong agreement between methods with consistent hot spots.';
   } else if (methodsUsed >= 2 && (overlapScore >= 1 || evidenceScore >= 1)) {
     levelLabel = 'Balanced';
-    levelNote  = 'Solid mix of agreement and proven ranks \u2014 suitable as a core set.';
+    levelNote  = 'Solid mix of agreement and proven ranks  -  suitable as a core set.';
   }
 
   // Locked confidence definition (always shown)
   if (confSlot) { confSlot.textContent = 'Hybrid (Agreement \u00d7 Historical Validation)'; }
 
   // Level + explanation (what changes)
-  if (noteSlot) { noteSlot.textContent = 'Level: ' + levelLabel + ' \u2014 ' + levelNote; }
+  if (noteSlot) { noteSlot.textContent = 'Level: ' + levelLabel + '  -  ' + levelNote; }
 }
 
 // REMOVED: Field coverage view calculations
@@ -22353,7 +22353,7 @@ if (mode === 'post') {
   var drawnExtraText = drawnExtra.length ? (' \u2022 ' + (window.extraLabel || 'Extras') + ': ' + drawnExtra.join(', ')) : '';
   html += '\u003cdiv class="s-row subtle"\u003e\u003cstrong\u003eResult Recap:\u003c/strong\u003e ' + drawnMainText + drawnExtraText + '.\u003c/div\u003e';
 } else {
-  var headMain  = finalMain.length ? ('Mains: ' + take(finalMain, 8).join(', ')) : 'Mains: \u2014';
+  var headMain  = finalMain.length ? ('Mains: ' + take(finalMain, 8).join(', ')) : 'Mains:  - ';
   var headExtra = recExtra.length   ? (' \u2022 ' + (window.extraLabel || 'Extras') + ': ' + recExtra.join(', ')) : '';
   html += '\u003cdiv class="s-row subtle"\u003e\u003cstrong\u003eRecommended Focus:\u003c/strong\u003e ' + headMain + headExtra + '.\u003c/div\u003e';
 }
@@ -22378,7 +22378,7 @@ methods.forEach(function(m){
   var pkM = topRanksWithTies(rowM, 3, 3);
   var pkE = topRanksWithTies(rowE, 2, 2);
 
-  var line = labelShort[m] + ' \u2014 ';
+  var line = labelShort[m] + '  -  ';
   line += 'Main hits: ' + totalM;
   if (drawnExtra.length) line += ' \u2022 Extra hits: ' + totalE;
 
@@ -22404,7 +22404,7 @@ if (mode === 'post') {
     ? bits.join('; ') + '.'
     : 'there is not enough selected history yet to locate clear sweet spots.';
   var overlapIntro = overlapParts.length
-    ? ('Overlaps are strong \u2014 ' + overlapParts.join(' + ') + '. ')
+    ? ('Overlaps are strong  -  ' + overlapParts.join(' + ') + '. ')
     : '';
 
   // Brand-honest single-selection state
@@ -22425,7 +22425,7 @@ if (evidenceLines.length) {
           evidenceLines.map(function(l){ return '\u003cli\u003e' + l + '\u003c/li\u003e'; }).join('') +
           '\u003c/ul\u003e';
 } else {
-  html += '\u003cdiv class="bullet"\u003e\u003cem\u003eNot enough selected history yet to build an evidence list \u2014 keep saving more runs.\u003c/em\u003e\u003c/div\u003e';
+  html += '\u003cdiv class="bullet"\u003e\u003cem\u003eNot enough selected history yet to build an evidence list  -  keep saving more runs.\u003c/em\u003e\u003c/div\u003e';
 }
 
 // Recommended numbers (chips)  -  same order logic
@@ -22448,17 +22448,17 @@ var recText;
 if (mode === 'post') {
   // Post-draw: use what just happened to tune the next play
   recText = '\u003cstrong\u003eHow to use this draw:\u003c/strong\u003e \u003col\u003e' +
-            '\u003cli\u003eBuild your core from numbers that show up in more than one method \u2014 when methods agree, that signal is stronger.\u003c/li\u003e' +
-            '\u003cli\u003eLean on the \u201chot spot\u201d ranks where your methods actually hit the winning numbers (especially around #1\u20135).\u003c/li\u003e' +
-            '\u003cli\u003eDo not only stack #1 picks \u2014 keep some middle-rank numbers (#4\u2013#10) in the mix for balance.\u003c/li\u003e' +
-            '\u003c/ol\u003e \u003cem\u003eWe stand behind this analysis \u2014 it is built on real patterns from real draw history, giving you a structured, evidence-backed strategy.\u003c/em\u003e';
+            '\u003cli\u003eBuild your core from numbers that show up in more than one method  -  when methods agree, that signal is stronger.\u003c/li\u003e' +
+            '\u003cli\u003eLean on the 'hot spot' ranks where your methods actually hit the winning numbers (especially around #1-5).\u003c/li\u003e' +
+            '\u003cli\u003eDo not only stack #1 picks  -  keep some middle-rank numbers (#4-#10) in the mix for balance.\u003c/li\u003e' +
+            '\u003c/ol\u003e \u003cem\u003eWe stand behind this analysis  -  it is built on real patterns from real draw history, giving you a structured, evidence-backed strategy.\u003c/em\u003e';
 } else {
   // Pre-draw: guidance before the next results land
   recText = '\u003cstrong\u003eFor your upcoming plays:\u003c/strong\u003e \u003col\u003e' +
-            '\u003cli\u003eStart with numbers that more than one method likes \u2014 overlap is your \u201cagreement\u201d signal.\u003c/li\u003e' +
-            '\u003cli\u003eAdd a few \u201chot spot\u201d ranks from each method (where they tend to perform best), not just the top rank.\u003c/li\u003e' +
-            '\u003cli\u003eMix in middle-rank numbers (#4\u2013#10) so your ticket is not all-in on only the very top picks.\u003c/li\u003e' +
-            '\u003c/ol\u003e \u003cem\u003eThis is a coach\'s evidence-backed game plan \u2014 structured, data-driven choices that put the odds in your favour.\u003c/em\u003e';
+            '\u003cli\u003eStart with numbers that more than one method likes  -  overlap is your 'agreement' signal.\u003c/li\u003e' +
+            '\u003cli\u003eAdd a few 'hot spot' ranks from each method (where they tend to perform best), not just the top rank.\u003c/li\u003e' +
+            '\u003cli\u003eMix in middle-rank numbers (#4-#10) so your ticket is not all-in on only the very top picks.\u003c/li\u003e' +
+            '\u003c/ol\u003e \u003cem\u003eThis is a coach\'s evidence-backed game plan  -  structured, data-driven choices that put the odds in your favour.\u003c/em\u003e';
 }
 
 html += '\u003cdiv class="section-h"\u003e\u003cstrong\u003eRecommendation:\u003c/strong\u003e\u003c/div\u003e' +
@@ -22508,7 +22508,7 @@ if (trendAgreement || trendEvidence) {
     (trendEvidence ? trendEvidence : '') +
   '\u003c/div\u003e';
 } else {
-  html += '\u003cdiv class="bullet"\u003e\u003cem\u003eNot enough history yet to measure direction \u2014 save a few more runs to unlock trends.\u003c/em\u003e\u003c/div\u003e';
+  html += '\u003cdiv class="bullet"\u003e\u003cem\u003eNot enough history yet to measure direction  -  save a few more runs to unlock trends.\u003c/em\u003e\u003c/div\u003e';
 }
 
 if (trendConf) {
@@ -22517,7 +22517,7 @@ if (trendConf) {
 
 html += '\u003cdiv class="section-h"\u003e\u003cstrong\u003eWhat this tells us:\u003c/strong\u003e\u003c/div\u003e' +
         '\u003cdiv class="bullet"\u003e' + posture + '\u003c/div\u003e' +
-        '\u003cdiv class="bullet"\u003e\u003cem\u003eBacked by real draw history and rigorous data analysis \u2014 your most informed strategy yet.\u003c/em\u003e\u003c/div\u003e';
+        '\u003cdiv class="bullet"\u003e\u003cem\u003eBacked by real draw history and rigorous data analysis  -  your most informed strategy yet.\u003c/em\u003e\u003c/div\u003e';
 
 html += '\u003cdiv class="section-h"\u003e\u003cstrong\u003eWhat to try next:\u003c/strong\u003e\u003c/div\u003e';
 
@@ -22528,7 +22528,7 @@ if (nextSteps && nextSteps.length) {
   });
   html += '\u003c/ul\u003e';
 } else {
-  html += '\u003cdiv class="bullet"\u003e\u003cem\u003eNo changes suggested right now \u2014 this is a reasonable baseline.\u003c/em\u003e\u003c/div\u003e';
+  html += '\u003cdiv class="bullet"\u003e\u003cem\u003eNo changes suggested right now  -  this is a reasonable baseline.\u003c/em\u003e\u003c/div\u003e';
 }
 
 // Render structured narrative (Sorcerer <..> -> HTML)
@@ -22782,7 +22782,7 @@ function initOuterLotteryCollapse() {
       if (storageKey && localStorage.getItem(storageKey) === 'true') {
         outerEl.classList.add('body-collapsed');
         var btn = outerEl.querySelector('.mle-lottery-outer-toggle');
-        if (btn) { btn.textContent = '\u25b6 Expand'; }
+        if (btn) { btn.textContent = '[+] Expand'; }
       }
     } catch (e) {}
   });
@@ -22805,7 +22805,7 @@ function initLotteryCollapse() {
     try {
       if (localStorage.getItem('lottery_collapsed_' + (baseLid || lotteryId)) === 'true') {
         group.classList.add('collapsed');
-        toggle.textContent = '\u25b6 Expand';
+        toggle.textContent = '[+] Expand';
         toggle.setAttribute('aria-expanded', 'false');
         toggle.setAttribute('aria-label', 'Expand lottery section');
       }
@@ -22825,7 +22825,7 @@ initLotteryCollapse();
   for (var i = 0; i < groups.length; i++) {
     if (!groups[i].classList.contains('collapsed')) { anyExpanded = true; break; }
   }
-  allBtn.textContent = anyExpanded ? '\u25bc Collapse All' : '\u25b6 Expand All';
+  allBtn.textContent = anyExpanded ? '[-] Collapse All' : '[+] Expand All';
 }());
 
 // Restore Prediction Results section collapse state from localStorage.
@@ -23019,7 +23019,7 @@ initLotteryCollapse();
       var tot=builderMains.length, con=builderMains.filter(function(n){return!!consensusSet[n];}).length;
       var rat=tot>0?con/tot:0;
       // Confidence
-      var d=0,cs='\u2014',cc='';
+      var d=0,cs=' - ',cc='';
       if(tot>0){if(rat>=0.8){cs='Strong';cc='sw-pos';d=5;}else if(rat>=0.5){cs='Moderate';cc='sw-pos';d=3;}else{cs='Low';cc='sw-caut';d=1;}}
       if(confLabel){confLabel.textContent=cs;confLabel.className='sw-intel-label '+cc;}
       if(confDetail)confDetail.textContent=tot>0?'Consensus: '+con+' of '+tot+' ('+Math.round(rat*100)+'%).':'Add numbers to see how strong the agreement is.';
@@ -23041,7 +23041,7 @@ initLotteryCollapse();
       }
       // Balance
       if(tot===0){
-        if(balLabel){balLabel.textContent='\u2014';balLabel.className='sw-intel-label';}
+        if(balLabel){balLabel.textContent=' - ';balLabel.className='sw-intel-label';}
         if(balDetail)balDetail.textContent='Add numbers to check balance.';
       }else{
         var ht=false,hm=false;
@@ -23052,11 +23052,11 @@ initLotteryCollapse();
         var bs,bc;
         if(ht&&hm){bs='Balanced';bc='sw-pos';}else if(ht){bs='Top-heavy';bc='sw-caut';}else if(hm){bs='Mid-heavy';bc='sw-caut';}else{bs='Unknown';bc='';}
         if(balLabel){balLabel.textContent=bs;balLabel.className='sw-intel-label '+bc;}
-        if(balDetail)balDetail.textContent=(ht&&hm)?'Good mix of top and mid-rank numbers.':(ht?'Mostly top-rank. Try adding mid-rank numbers (#4\u201310).':'Mostly mid-rank. Try adding a top-rank number (#1\u20133).');
+        if(balDetail)balDetail.textContent=(ht&&hm)?'Good mix of top and mid-rank numbers.':(ht?'Mostly top-rank. Try adding mid-rank numbers (#4-10).':'Mostly mid-rank. Try adding a top-rank number (#1-3).');
       }
       // Wheel readiness
       var ws2,wc,wn;
-      if(tot===0){ws2='\u2014';wc='';wn='Add at least 10 main numbers.';}
+      if(tot===0){ws2=' - ';wc='';wn='Add at least 10 main numbers.';}
       else if(tot>=15){ws2='Wheel-ready: Yes';wc='sw-pos';wn=tot===15?'15 numbers is a common wheel base.':'Large enough for most wheeling systems.';}
       else if(tot>=10){ws2='Wheel-ready: Maybe';wc='sw-caut';wn='Small set ('+tot+' mains). Add more for a larger wheel.';}
       else{ws2='Wheel-ready: No';wc='sw-warn';wn='Need at least 10 main numbers ('+tot+' so far).';}
@@ -23125,12 +23125,12 @@ function mleOuterLotteryToggle(outerEl) {
   var isCollapsed = outerEl.classList.contains('body-collapsed');
   if (isCollapsed) {
     outerEl.classList.remove('body-collapsed');
-    if (btn) { btn.textContent = '\u25bc Collapse'; }
+    if (btn) { btn.textContent = '[-] Collapse'; }
     outerEl.setAttribute('aria-expanded', 'true');
     if (storageKey) { try { localStorage.setItem(storageKey, 'false'); } catch(e) {} }
   } else {
     outerEl.classList.add('body-collapsed');
-    if (btn) { btn.textContent = '\u25b6 Expand'; }
+    if (btn) { btn.textContent = '[+] Expand'; }
     outerEl.setAttribute('aria-expanded', 'false');
     if (storageKey) { try { localStorage.setItem(storageKey, 'true'); } catch(e) {} }
   }
@@ -23294,13 +23294,13 @@ function skaiLotteryToggle(btn) {
 
   if (isCollapsed) {
     group.classList.remove('collapsed');
-    btn.textContent = '\u25bc Collapse';
+    btn.textContent = '[-] Collapse';
     btn.setAttribute('aria-expanded', 'true');
     btn.setAttribute('aria-label', 'Collapse lottery section');
     if (storageKey) { try { localStorage.setItem(storageKey, 'false'); } catch(e) {} }
   } else {
     group.classList.add('collapsed');
-    btn.textContent = '\u25b6 Expand';
+    btn.textContent = '[+] Expand';
     btn.setAttribute('aria-expanded', 'false');
     btn.setAttribute('aria-label', 'Expand lottery section');
     if (storageKey) { try { localStorage.setItem(storageKey, 'true'); } catch(e) {} }
@@ -23334,7 +23334,7 @@ function skaiLotteryToggleAll(btn) {
     if (shouldCollapse) {
       group.classList.add('collapsed');
       if (toggle) {
-        toggle.textContent = '\u25b6 Expand';
+        toggle.textContent = '[+] Expand';
         toggle.setAttribute('aria-expanded', 'false');
         toggle.setAttribute('aria-label', 'Expand lottery section');
       }
@@ -23342,7 +23342,7 @@ function skaiLotteryToggleAll(btn) {
     } else {
       group.classList.remove('collapsed');
       if (toggle) {
-        toggle.textContent = '\u25bc Collapse';
+        toggle.textContent = '[-] Collapse';
         toggle.setAttribute('aria-expanded', 'true');
         toggle.setAttribute('aria-label', 'Collapse lottery section');
       }
@@ -23357,16 +23357,16 @@ function skaiLotteryToggleAll(btn) {
     var outerBtn  = outerEl.querySelector('.mle-lottery-outer-toggle');
     if (shouldCollapse) {
       outerEl.classList.add('body-collapsed');
-      if (outerBtn) { outerBtn.textContent = '\u25b6 Expand'; }
+      if (outerBtn) { outerBtn.textContent = '[+] Expand'; }
       if (outerKey) { try { localStorage.setItem(outerKey, 'true'); } catch(e) {} }
     } else {
       outerEl.classList.remove('body-collapsed');
-      if (outerBtn) { outerBtn.textContent = '\u25bc Collapse'; }
+      if (outerBtn) { outerBtn.textContent = '[-] Collapse'; }
       if (outerKey) { try { localStorage.setItem(outerKey, 'false'); } catch(e) {} }
     }
   }
   if (btn) {
-    btn.textContent = shouldCollapse ? '\u25b6 Expand All' : '\u25bc Collapse All';
+    btn.textContent = shouldCollapse ? '[+] Expand All' : '[-] Collapse All';
   }
 }
 
@@ -23543,12 +23543,12 @@ function skaiPrcSetCollapsed(sec, collapsed) {
   if (collapsed) {
     sec.classList.add('collapsed');
     body.style.display = 'none';
-    if (btn) { btn.textContent = '\u25BA Expand'; }
+    if (btn) { btn.textContent = '[+] Expand'; }
     if (hdr) { hdr.setAttribute('aria-expanded', 'false'); }
   } else {
     sec.classList.remove('collapsed');
     body.style.display = '';
-    if (btn) { btn.textContent = '\u25BC Collapse'; }
+    if (btn) { btn.textContent = '[-] Collapse'; }
     if (hdr) { hdr.setAttribute('aria-expanded', 'true'); }
   }
 }
@@ -23895,7 +23895,7 @@ function _mleOpenPrintWindow(cards, triggerEl, groupEl) {
   var __p = [];
   __p.push(_LT+'!DOCTYPE html'+_GT+_LT+'html lang="en"'+_GT+_LT+'head'+_GT);
   __p.push(_LT+'meta charset="UTF-8"'+_GT);
-  __p.push(_LT+'title'+_GT+'My LottoExpert \u2013 Prediction Report'+_LT+'/title'+_GT);
+  __p.push(_LT+'title'+_GT+'My LottoExpert - Prediction Report'+_LT+'/title'+_GT);
   __p.push(_LT+'style'+_GT);
 
   // Hard reset: force standard table display values so nothing can override them.
@@ -23944,7 +23944,7 @@ function _mleOpenPrintWindow(cards, triggerEl, groupEl) {
   __p.push(_LT+'table style="width:100%;border-collapse:collapse;margin-top:28px;" cellspacing="0" cellpadding="0"'+_GT);
   __p.push(_LT+'tr'+_GT);
   __p.push(_LT+'td style="border-top:1px solid #e5e7eb;padding:10px 0;font-family:Arial,Helvetica,sans-serif;font-size:7.5pt;color:#9ca3af;text-align:center;"'+_GT);
-  __p.push('Generated by My LottoExpert \u00a0\u2022\u00a0 For personal use only \u00a0\u2014\u00a0 Past results do not guarantee future outcomes.');
+  __p.push('Generated by My LottoExpert \u00a0\u2022\u00a0 For personal use only \u00a0 - \u00a0 Past results do not guarantee future outcomes.');
   __p.push(_LT+'/td'+_GT);
   __p.push(_LT+'/tr'+_GT);
   __p.push(_LT+'/table'+_GT);
@@ -24025,7 +24025,7 @@ function _mlePrintFallback(cardsHtml, lotteryTitle, printDate, cardCount) {
     +     'font-family:Arial,Helvetica,sans-serif;font-size:7.5pt;'
     +     'color:#9ca3af;text-align:center;"'+_GT
     +   'Generated by My LottoExpert \u00a0\u2022\u00a0 '
-    +   'For personal use only \u00a0\u2014\u00a0 '
+    +   'For personal use only \u00a0 - \u00a0 '
     +   'Past results do not guarantee future outcomes.'
     + _LT+'/td'+_GT
     + _LT+'/tr'+_GT
@@ -24118,7 +24118,7 @@ function _mleFormatNums(nodes, isExtra) {
     parts.push(_LT+'span style="' + inlineStyle + '"'+_GT + _mleEsc(val) + _LT+'/span'+_GT);
   });
   // Em-dash separator keeps each number visually distinct
-  return parts.join(_LT+'span style="color:#d1d5db;padding:0 5px;font-weight:normal;"'+_GT+'\u2014'+_LT+'/span'+_GT);
+  return parts.join(_LT+'span style="color:#d1d5db;padding:0 5px;font-weight:normal;"'+_GT+' - '+_LT+'/span'+_GT);
 }
 
 /**
@@ -24144,7 +24144,7 @@ function _mleBuildCardHtml(card, cardIndex, totalCards) {
     Array.prototype.forEach.call(tsLabelEl.childNodes, function (node) {
       if (node.nodeType === 3) { labelParts.push(node.nodeValue); }
     });
-    runLabel = labelParts.join('').replace(/\s+/g, ' ').replace(/\s*[\u2013-]\s*$/, '').trim();
+    runLabel = labelParts.join('').replace(/\s+/g, ' ').replace(/\s*[--]\s*$/, '').trim();
   }
 
   // -- Saved-at timestamp: prefer data-timestamp attribute (ISO) for accuracy --
@@ -24345,7 +24345,7 @@ var html = __h.join('');
      // FIX: Avoid any chance of a literal newline being injected into a quoted string
     // by keeping message text in short, safe literals and escaping the em dash.
     var _mleDrawMsg = isPending
-      ? ('Draw results not yet available \u2014 check back after the draw date.')
+      ? ('Draw results not yet available  -  check back after the draw date.')
       : ('Upcoming draw.');
 
     var drawStatus =
@@ -24383,7 +24383,7 @@ var html = __h.join('');
       var bonusLine = extraHits + ' of ' + predExtra.length + ' bonus ball'
                     + (predExtra.length !== 1 ? 's' : '') + ' matched';
       if (matchedExtras.length > 0) {
-        bonusLine += ' \u2014 ' + matchedExtras.join(', ');
+        bonusLine += '  -  ' + matchedExtras.join(', ');
       }
       matchLines += _LT+'div style="margin-top:5px;font-family:Arial,Helvetica,sans-serif;'
                   + 'font-size:9pt;color:#374151;"'+_GT
