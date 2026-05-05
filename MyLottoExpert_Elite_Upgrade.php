@@ -4759,55 +4759,10 @@ if ($__mleAction === 'apply_evidence_choices') {
 }
 
 // ------------------------------------------------------------------
-// apply_batch_cleanup  (legacy handler kept for backwards compatibility)
+// apply_batch_cleanup - disabled. Use apply_evidence_choices instead.
 // ------------------------------------------------------------------
 if ($__mleAction === 'apply_batch_cleanup') {
-    if (!\Joomla\CMS\Session\Session::checkToken('post')) {
-        $app->enqueueMessage('Session expired. Please refresh and try again.', 'warning');
-        $app->redirect(\Joomla\CMS\Uri\Uri::getInstance()->toString());
-        return;
-    }
-    if (MLE_DEMO_MODE) {
-        $app->enqueueMessage('Demo mode: Cannot apply batch cleanup.', 'warning');
-        $app->redirect(\Joomla\CMS\Uri\Uri::getInstance()->toString());
-        return;
-    }
-    if ($workspaceUserId <= 0) {
-        $app->enqueueMessage('Please log in to apply batch cleanup.', 'warning');
-        $app->redirect(\Joomla\CMS\Uri\Uri::getInstance()->toString());
-        return;
-    }
-    $__advKeepIds    = array_map('intval', (array)($app->input->post->get('keep_ids',    array(), 'ARRAY')));
-    $__advArchiveIds = array_map('intval', (array)($app->input->post->get('archive_ids', array(), 'ARRAY')));
-    $__advRetireIdsLeg = array_map('intval', (array)($app->input->post->get('retire_ids', array(), 'ARRAY')));
-    $__advLotteryId  = $app->input->getInt('lottery_id', 0);
-    mleAdvisoryEnsureSchemaColumns($db);
-    $prefix    = $db->getPrefix();
-    $perfTable = $db->quoteName($prefix . 'skai_learning_performance');
-    $updated   = 0;
-    foreach ($__advKeepIds as $kid) {
-        if ($kid <= 0) { continue; }
-        try {
-            $q = $db->getQuery(true)->update($perfTable)->set($db->quoteName('advice_status') . ' = ' . $db->quote('use_in_advice'))->where($db->quoteName('id') . ' = ' . $kid)->where($db->quoteName('user_id') . ' = ' . $workspaceUserId);
-            $db->setQuery($q); $db->execute(); $updated++;
-        } catch (\Throwable $e) {}
-    }
-    // legacy archive_ids map to retired status
-    foreach ($__advArchiveIds as $aid) {
-        if ($aid <= 0) { continue; }
-        try {
-            $q = $db->getQuery(true)->update($perfTable)->set($db->quoteName('advice_status') . ' = ' . $db->quote('retired'))->where($db->quoteName('id') . ' = ' . $aid)->where($db->quoteName('user_id') . ' = ' . $workspaceUserId);
-            $db->setQuery($q); $db->execute(); $updated++;
-        } catch (\Throwable $e) {}
-    }
-    foreach ($__advRetireIdsLeg as $rid) {
-        if ($rid <= 0) { continue; }
-        try {
-            $q = $db->getQuery(true)->update($perfTable)->set($db->quoteName('advice_status') . ' = ' . $db->quote('retired'))->where($db->quoteName('id') . ' = ' . $rid)->where($db->quoteName('user_id') . ' = ' . $workspaceUserId);
-            $db->setQuery($q); $db->execute(); $updated++;
-        } catch (\Throwable $e) {}
-    }
-    $app->enqueueMessage('Batch cleanup applied. ' . $updated . ' runs updated.', 'message');
+    $app->enqueueMessage('This action is no longer supported. Please use the evidence choices form on each lottery card.', 'warning');
     $app->redirect(\Joomla\CMS\Uri\Uri::getInstance()->toString());
     return;
 }
@@ -12012,7 +11967,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
       <p class="mle-adv-pred-summary__reason"><?php echo $__advPSReason; ?></p>
       <?php endif; ?>
       <?php if (!empty($__advPSRuns)): ?>
-      <button type="button" class="mle-advisory-btn mle-advisory-btn--ghost mle-adv-runs-toggle" data-lid="<?php echo $__advLid; ?>" aria-expanded="false" aria-controls="<?php echo $__advRunsBodyId; ?>">View saved runs</button>
+      <button type="button" class="mle-advisory-btn mle-advisory-btn--ghost mle-section-toggle" aria-expanded="false" aria-controls="<?php echo $__advRunsBodyId; ?>"><span>View saved runs</span></button>
       <div id="<?php echo $__advRunsBodyId; ?>" class="mle-adv-runs-list" style="display:none;margin-top:.5rem" aria-hidden="true">
         <?php foreach ($__advPSRuns as $__advPSRun):
           $__psrId     = (int)($__advPSRun['id']        ?? 0);
@@ -12310,21 +12265,6 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
 
 <script>
 (function() {
-  function mleAdvToggleProof(btn) {
-    var lid = btn.getAttribute('data-lid');
-    var det = document.getElementById('mle-adv-proof-' + lid);
-    if (!det) { return; }
-    if (det.open) { det.removeAttribute('open'); btn.textContent = 'Show Proof History'; }
-    else { det.setAttribute('open', ''); btn.textContent = 'Hide Proof History'; }
-  }
-  function mleAdvToggleSettings(btn) {
-    var lid = btn.getAttribute('data-lid');
-    var det = document.getElementById('mle-adv-settings-' + lid);
-    if (!det) { return; }
-    var hidden = det.style.display === 'none' || det.style.display === '';
-    det.style.display = hidden ? 'block' : 'none';
-    btn.textContent = hidden ? 'Hide Settings Detail' : 'Try These Settings Next';
-  }
   function mleAdvToggleCard(btn) {
     var bodyId = btn.getAttribute('aria-controls');
     var body = bodyId ? document.getElementById(bodyId) : null;
@@ -12341,16 +12281,6 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
       btn.setAttribute('aria-expanded', 'true');
       btn.textContent = 'Collapse';
     }
-  }
-  function mleAdvToggleRuns(btn) {
-    var lid = btn.getAttribute('data-lid');
-    var panel = document.getElementById('mle-adv-runs-' + lid);
-    if (!panel) { return; }
-    var hidden = panel.style.display === 'none' || panel.style.display === '';
-    panel.style.display = hidden ? 'block' : 'none';
-    panel.setAttribute('aria-hidden', hidden ? 'false' : 'true');
-    btn.setAttribute('aria-expanded', hidden ? 'true' : 'false');
-    btn.textContent = hidden ? 'Hide saved runs' : 'View saved runs';
   }
   function mleAdvReviewRuns(btn) {
     var lid = btn.getAttribute('data-cleanup-lid');
@@ -12369,20 +12299,19 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
   document.addEventListener('click', function(e) {
     var t = e.target;
     if (!t) { return; }
-    // Bubble up to find the button even if a child span was clicked
     var btn = t;
     while (btn && btn.tagName && btn.tagName.toUpperCase() !== 'BUTTON' && btn !== document.body) {
       btn = btn.parentNode;
     }
     if (!btn || !btn.classList) { return; }
-    if (btn.classList.contains('mle-lottery-advice-toggle') || btn.classList.contains('mle-adv-expand-btn')) { mleAdvToggleCard(btn); }
-    // mle-section-toggle: generic collapsible sections inside each card
+    if (btn.classList.contains('mle-lottery-advice-toggle')) { mleAdvToggleCard(btn); }
     if (btn.classList.contains('mle-section-toggle')) {
       var bodyId = btn.getAttribute('aria-controls');
       var body = bodyId ? document.getElementById(bodyId) : null;
       if (!body) { return; }
       var hidden = body.style.display === 'none' || body.style.display === '';
       body.style.display = hidden ? 'block' : 'none';
+      body.setAttribute('aria-hidden', hidden ? 'false' : 'true');
       btn.setAttribute('aria-expanded', hidden ? 'true' : 'false');
       var span = btn.querySelector('span');
       if (span) {
@@ -12390,12 +12319,8 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
         if (txt.indexOf('Show ') === 0) { span.textContent = txt.replace('Show ', 'Hide '); }
         else if (txt.indexOf('Hide ') === 0) { span.textContent = txt.replace('Hide ', 'Show '); }
         else if (txt.indexOf('View ') === 0) { span.textContent = hidden ? txt.replace('View ', 'Hide ') : txt; }
-        else if (txt.indexOf('Hide ') === 0) { span.textContent = hidden ? txt : txt.replace('Hide ', 'View '); }
       }
     }
-    if (t.classList && t.classList.contains('mle-adv-proof-toggle'))    { mleAdvToggleProof(t); }
-    if (t.classList && t.classList.contains('mle-adv-settings-toggle')) { mleAdvToggleSettings(t); }
-    if (t.classList && t.classList.contains('mle-adv-runs-toggle'))     { mleAdvToggleRuns(t); }
     if (t.classList && t.classList.contains('mle-adv-review-runs-btn')) { mleAdvReviewRuns(t); }
     if (t.classList && t.classList.contains('mle-adv-leave-as-is-btn')) { mleAdvLeaveAsIs(t); }
   });
@@ -16335,6 +16260,8 @@ foreach ($bestOpps as $__sopp) {
   </div>
 </div>
 
+<!-- Draw Results Comparison is now displayed inside each lottery advisory card above. The standalone section below is preserved for reference but not rendered. -->
+<?php /* STANDALONE_DRAW_RESULTS_START - moved inside lottery cards */ if (false): ?>
 <!-- ============================================================
      PREDICTION RESULTS COMPARISON TABLE
      Line-by-line summary per lottery, across all dates.
@@ -16647,6 +16574,7 @@ foreach ($bestOpps as $__sopp) {
 
 </div>
 <?php endif; ?>
+<?php endif; /* STANDALONE_DRAW_RESULTS_END */ ?>
 
 <?php if (empty($groups)): ?>
   <div class="skai-card prediction-placeholder" style="margin-bottom:2rem; text-align:center; padding:2rem;">
@@ -16692,10 +16620,11 @@ foreach ($bestOpps as $__sopp) {
 
 <?php if (! empty($groups) ): ?>
 
+<!-- Saved Predictions are now shown inside each lottery advisory card above. The standalone section below is preserved for reference but not rendered. -->
 <!-- ==================================================
      Saved Predictions & Numbers Section $unionSql
 ================================================== -->
-<div class="mle-saved-predictions-shell mle-mode-<?php echo htmlspecialchars($__mleWorkspaceMode, ENT_QUOTES, 'UTF-8'); ?>">
+<div class="mle-saved-predictions-shell mle-mode-<?php echo htmlspecialchars($__mleWorkspaceMode, ENT_QUOTES, 'UTF-8'); ?>" style="display:none" aria-hidden="true">
 
 <div class="mle-sp-hero" id="saved-predictions">
   <div class="mle-section-label mle-sp-hero__label" style="margin:0; padding:0;">
