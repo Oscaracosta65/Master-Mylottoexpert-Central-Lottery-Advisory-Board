@@ -3515,6 +3515,8 @@ function mleAdvisoryComputeSettingsAdvisor($db, $userId, $lotteryId, $method = '
     $method    = strtolower(trim((string)$method));
     $noAdvice  = array('has_advice' => false, 'setting' => '', 'setting_label' => '', 'current_value' => '', 'suggested_value' => '', 'reason' => '', 'proof_level' => mleAdvisoryGetProofLevelLabel(0, 0));
     if ($userId <= 0 || $lotteryId <= 0) { return $noAdvice; }
+    // Only advise on the provided active matched perf IDs. If none, there is nothing to advise on.
+    if (empty($restrictPerfIds)) { return $noAdvice; }
     $prefix    = $db->getPrefix();
     $perfTable = '`' . $prefix . 'skai_learning_performance`';
     $methodSources = array(
@@ -3533,13 +3535,9 @@ function mleAdvisoryComputeSettingsAdvisor($db, $userId, $lotteryId, $method = '
         $cols = $db->loadColumn();
         $hasAdviceStatus = in_array('advice_status', is_array($cols) ? $cols : array(), true);
     } catch (\Throwable $e) {}
-    $where = "WHERE slp.`user_id` = {$userId} AND (slp.`lottery_id` = {$lotteryId} OR slp.`target_lottery_id` = {$lotteryId}) AND slp.`source` IN ({$sourceList}) AND slp.`avg_winning_rank` IS NOT NULL";
+    $safeIds = implode(',', array_map('intval', $restrictPerfIds));
+    $where = "WHERE slp.`user_id` = {$userId} AND slp.`source` IN ({$sourceList}) AND slp.`avg_winning_rank` IS NOT NULL AND slp.`id` IN ({$safeIds})";
     if ($hasAdviceStatus) { $where .= " AND (slp.`advice_status` IS NULL OR slp.`advice_status` = 'use_in_advice')"; }
-    // Restrict to matched active perf IDs when provided
-    if (!empty($restrictPerfIds)) {
-        $safeIds = implode(',', array_map('intval', $restrictPerfIds));
-        $where .= " AND slp.`id` IN ({$safeIds})";
-    }
     $snTable   = '`' . $prefix . 'user_saved_numbers`';
     try {
         $sql = "SELECT slp.`top10_hits`, slp.`top20_hits`, slp.`avg_winning_rank`, slp.`missing_hits_count`, slp.`weighted_quality_score`,"
@@ -4171,6 +4169,7 @@ function mleAdvisoryLoadActiveSavedEvidence($db, $userId) {
                 'lottery_name'           => (string)($row['lottery_name'] ?? ''),
                 'run_ids'                => array(),
                 'rows'                   => array(),
+                'active_sources'         => array(),
                 'run_uuids'              => array(),
                 'snapshot_run_uuids'     => array(),
                 'run_identity_keys'      => array(),
@@ -4181,6 +4180,9 @@ function mleAdvisoryLoadActiveSavedEvidence($db, $userId) {
         $rid = (int)$row['id'];
         $grouped[$lid]['run_ids'][]      = $rid;
         $grouped[$lid]['rows'][$rid]     = $row;
+        // Track which source methods have active saved rows (for eligibility filtering)
+        $rowSrc = strtolower(trim((string)($row['source'] ?? '')));
+        if ($rowSrc !== '') { $grouped[$lid]['active_sources'][$rowSrc] = true; }
         // Collect identity keys for multi-key performance matching
         if (!empty($row['run_uuid']))            { $grouped[$lid]['run_uuids'][]              = (string)$row['run_uuid']; }
         if (!empty($row['snapshot_run_uuid']))   { $grouped[$lid]['snapshot_run_uuids'][]     = (string)$row['snapshot_run_uuid']; }
@@ -4370,6 +4372,38 @@ function mleAdvisoryBuildLotteryCardFromEvidence($db, $userId, $lotteryId, $lott
     if (empty($activeRunIds)) {
         $activeRunIds = (array)($activeRows['run_ids'] ?? array());
     }
+
+    // Collect which source/method groups are present in active saved rows for this lottery.
+    // A performance row source is only eligible if a corresponding active saved row exists for that method group.
+    // This prevents AI (or any method) from appearing in advice when the user has no active saved AI rows.
+    $activeSources = (array)($activeRows['active_sources'] ?? array());
+    // Method group aliases: map each source to its canonical group key
+    $srcGroupMap = array(
+        'skai' => 'skai', 'skai_prediction' => 'skai', 'skai_blend' => 'skai',
+        'ai' => 'ai', 'ai_prediction' => 'ai', 'neural' => 'ai',
+        'mcmc' => 'mcmc', 'mcmc_prediction' => 'mcmc',
+        'skip' => 'skip_hit', 'skip_hit' => 'skip_hit', 'skiphit' => 'skip_hit',
+        'frequency' => 'frequency', 'heatmap' => 'frequency',
+    );
+    // Build set of eligible method groups from active saved rows
+    $eligibleMethodGroups = array();
+    foreach ($activeSources as $src => $dummy) {
+        $grp = isset($srcGroupMap[$src]) ? $srcGroupMap[$src] : $src;
+        $eligibleMethodGroups[$grp] = true;
+    }
+    // If no active source info is available, allow all sources (backward compat)
+    if (!empty($eligibleMethodGroups)) {
+        $filteredPerfRows = array();
+        foreach ($matchedPerformanceRows as $pr) {
+            $prSrc = strtolower(trim((string)($pr['source'] ?? '')));
+            $prGrp = isset($srcGroupMap[$prSrc]) ? $srcGroupMap[$prSrc] : $prSrc;
+            if (isset($eligibleMethodGroups[$prGrp])) {
+                $filteredPerfRows[] = $pr;
+            }
+        }
+        $matchedPerformanceRows = $filteredPerfRows;
+    }
+
     $matchedPerfIds = array();
     foreach ($matchedPerformanceRows as $pr) {
         $pid = (int)($pr['id'] ?? 0);
@@ -5153,7 +5187,8 @@ if ($__mleAction === 'apply_evidence_choices') {
         if ($kid <= 0) { continue; }
         try {
             $q = $db->getQuery(true)->update($perfTable)->set($db->quoteName('advice_status') . ' = ' . $db->quote('use_in_advice'))->where($db->quoteName('id') . ' = ' . $kid)->where($db->quoteName('user_id') . ' = ' . $workspaceUserId);
-            $db->setQuery($q); $db->execute(); $updated++;
+            $db->setQuery($q); $db->execute();
+            if ($db->getAffectedRows() > 0) { $updated++; }
             $__mleApplySavedNumbersStatus($kid, 'use_in_advice');
         } catch (\Throwable $e) {}
     }
@@ -5161,7 +5196,8 @@ if ($__mleAction === 'apply_evidence_choices') {
         if ($wid <= 0) { continue; }
         try {
             $q = $db->getQuery(true)->update($perfTable)->set($db->quoteName('advice_status') . ' = ' . $db->quote('watch'))->where($db->quoteName('id') . ' = ' . $wid)->where($db->quoteName('user_id') . ' = ' . $workspaceUserId);
-            $db->setQuery($q); $db->execute(); $updated++;
+            $db->setQuery($q); $db->execute();
+            if ($db->getAffectedRows() > 0) { $updated++; }
             $__mleApplySavedNumbersStatus($wid, 'watch');
         } catch (\Throwable $e) {}
     }
@@ -5169,11 +5205,16 @@ if ($__mleAction === 'apply_evidence_choices') {
         if ($rid <= 0) { continue; }
         try {
             $q = $db->getQuery(true)->update($perfTable)->set($db->quoteName('advice_status') . ' = ' . $db->quote('retired'))->where($db->quoteName('id') . ' = ' . $rid)->where($db->quoteName('user_id') . ' = ' . $workspaceUserId);
-            $db->setQuery($q); $db->execute(); $updated++;
+            $db->setQuery($q); $db->execute();
+            if ($db->getAffectedRows() > 0) { $updated++; }
             $__mleApplySavedNumbersStatus($rid, 'retired');
         } catch (\Throwable $e) {}
     }
-    $app->enqueueMessage('Evidence choices applied. ' . $updated . ' runs updated.', 'message');
+    if ($updated > 0) {
+        $app->enqueueMessage('Evidence choices applied. ' . $updated . ' runs updated.', 'message');
+    } else {
+        $app->enqueueMessage('No evidence choices were changed. LottoExpert could not match the submitted evidence rows to active saved runs.', 'notice');
+    }
     $app->redirect(\Joomla\CMS\Uri\Uri::getInstance()->toString());
     return;
 }
@@ -6986,15 +7027,19 @@ if (MLE_DEMO_MODE) {
 
 #info-toggle {
   font-size: 0.72rem;
-  font-weight: 600;
-  color: rgba(0,0,0,0.60);
-  background: rgba(0,0,0,0.05);
-  border: 1px solid rgba(0,0,0,0.15);
+  font-weight: 700;
+  color: #0A1A33;
+  background: #FFFFFF;
+  border: 1px solid rgba(127,141,170,0.35);
   border-radius: 6px;
   padding: 3px 10px;
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
+}
+#info-toggle:hover {
+  background: #EFEFF5;
+  color: #0A1A33;
 }
 
 /* Optional: compact switch appearance */
@@ -12193,6 +12238,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
   $__advPSReason   = htmlspecialchars((string)($__advPredSum['short_reason'] ?? ''), ENT_QUOTES, 'UTF-8');
   $__advPSRuns     = (array)($__advPredSum['individual_runs'] ?? array());
   $__advRunsBodyId = 'mle-adv-runs-' . $__advLid;
+  $__advSPBodyId   = 'mle-adv-sp-'   . $__advLid;
 ?>
 <div class="mle-advisory-card" id="<?php echo $__advCardId; ?>" data-lottery-id="<?php echo $__advLid; ?>">
 
@@ -12660,7 +12706,19 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
     var panelId = btn.getAttribute('data-target-panel');
     if (!panelId) { return; }
     var panel = document.getElementById(panelId);
-    if (panel) { panel.style.display = 'none'; }
+    if (panel) {
+      panel.style.display = 'none';
+      var msg = document.getElementById(panelId + '-leave-msg');
+      if (!msg) {
+        msg = document.createElement('p');
+        msg.id = panelId + '-leave-msg';
+        msg.style.cssText = 'font-size:.82rem;color:#374151;margin:.5rem 0;padding:.5rem .75rem;background:#f0fdf4;border:1px solid #a7f3d0;border-radius:.375rem;';
+        msg.textContent = 'No changes applied. Your saved history was left as is.';
+        panel.parentNode.insertBefore(msg, panel.nextSibling);
+      } else {
+        msg.style.display = 'block';
+      }
+    }
   }
   document.addEventListener('click', function(e) {
     var t = e.target;
