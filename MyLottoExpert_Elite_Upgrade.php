@@ -4385,13 +4385,31 @@ function mleAdvisoryBuildLotteryCardFromEvidence($db, $userId, $lotteryId, $lott
         'skip' => 'skip_hit', 'skip_hit' => 'skip_hit', 'skiphit' => 'skip_hit',
         'frequency' => 'frequency', 'heatmap' => 'frequency',
     );
-    // Build set of eligible method groups from active saved rows
+    // Build set of eligible method groups from active saved rows.
+    // A method may appear in advice only if there is at least one active saved row for that method.
     $eligibleMethodGroups = array();
     foreach ($activeSources as $src => $dummy) {
         $grp = isset($srcGroupMap[$src]) ? $srcGroupMap[$src] : $src;
         $eligibleMethodGroups[$grp] = true;
     }
-    // If no active source info is available, allow all sources (backward compat)
+    // If active_sources is empty (source column not populated in saved rows),
+    // derive eligibility from performance rows matched directly via run_id -> active saved id (FK only).
+    // This prevents AI from appearing when no active AI saved run exists, even if source column is missing.
+    if (empty($eligibleMethodGroups) && !empty($activeRunIds)) {
+        $activeRunIdFlip = array_flip(array_map('intval', $activeRunIds));
+        foreach ($matchedPerformanceRows as $pr) {
+            $prRunId = (int)($pr['run_id'] ?? 0);
+            if ($prRunId > 0 && isset($activeRunIdFlip[$prRunId])) {
+                $prSrc = strtolower(trim((string)($pr['source'] ?? '')));
+                if ($prSrc !== '') {
+                    $grp = isset($srcGroupMap[$prSrc]) ? $srcGroupMap[$prSrc] : $prSrc;
+                    $eligibleMethodGroups[$grp] = true;
+                }
+            }
+        }
+    }
+    // Always filter by eligibleMethodGroups when source data is available.
+    // Only fall back to allowing all when no source info can be determined at all.
     if (!empty($eligibleMethodGroups)) {
         $filteredPerfRows = array();
         foreach ($matchedPerformanceRows as $pr) {
@@ -5210,7 +5228,12 @@ if ($__mleAction === 'apply_evidence_choices') {
             $__mleApplySavedNumbersStatus($rid, 'retired');
         } catch (\Throwable $e) {}
     }
-    if ($updated > 0) {
+    $allArraysEmpty = empty(array_filter($__advKeepIds, function($v) { return $v > 0; }))
+                   && empty(array_filter($__advWatchIds, function($v) { return $v > 0; }))
+                   && empty(array_filter($__advRetireIds, function($v) { return $v > 0; }));
+    if ($allArraysEmpty) {
+        $app->enqueueMessage('No evidence choices were available to apply for this lottery.', 'notice');
+    } elseif ($updated > 0) {
         $app->enqueueMessage('Evidence choices applied. ' . $updated . ' runs updated.', 'message');
     } else {
         $app->enqueueMessage('No evidence choices were changed. LottoExpert could not match the submitted evidence rows to active saved runs.', 'notice');
@@ -11997,7 +12020,7 @@ $__mleModeHelperText = array(
         </div>
 
         <div class="mle-onboard-hero__right">
-          <button id="info-toggle" type="button" class="mle-onboard-toggle" aria-expanded="true" aria-label="Collapse onboarding panel"> Expand</button>
+          <button id="info-toggle" type="button" class="mle-workspace-guide-toggle mle-section-toggle" aria-expanded="true" aria-controls="mle-workspace-guide-body"><span>Hide How Your Workspace Works</span></button>
 
           <div class="mle-onboard-hero__mini">
             <span class="mle-onboard-hero__mini-label">Current workspace status</span>
@@ -12008,7 +12031,7 @@ $__mleModeHelperText = array(
       </div>
     </div>
 
-    <div class="skai-card__body skai-stack skai-stack--tight">
+    <div id="mle-workspace-guide-body" class="mle-section-body skai-card__body skai-stack skai-stack--tight" style="display:block" aria-hidden="false">
 
       <div class="mle-onboard-progress-wrap">
         <div class="mle-onboard-progress__head">
@@ -12694,12 +12717,22 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
     var panelId = btn.getAttribute('data-target-panel');
     if (!panelId) { return; }
     var panel = document.getElementById(panelId);
-    if (!panel) { return; }
+    if (!panel) {
+      var msgNode = document.createElement('p');
+      msgNode.style.cssText = 'font-size:.82rem;color:#374151;margin:.5rem 0;padding:.5rem .75rem;background:#fef3c7;border:1px solid #fcd34d;border-radius:.375rem;';
+      msgNode.textContent = 'This section could not be opened because its target was not found.';
+      btn.parentNode.insertBefore(msgNode, btn.nextSibling);
+      return;
+    }
     panel.style.display = 'block';
     panel.setAttribute('aria-hidden', 'false');
-    var toggleId = panel.getAttribute('aria-labelledby') || '';
     var toggleBtn = document.querySelector('[aria-controls="' + panelId + '"]');
-    if (toggleBtn) { toggleBtn.setAttribute('aria-expanded', 'true'); }
+    if (toggleBtn) {
+      toggleBtn.setAttribute('aria-expanded', 'true');
+      var tSpan = toggleBtn.querySelector('span');
+      if (tSpan) { tSpan.textContent = 'Hide Saved Predictions'; }
+      else { toggleBtn.textContent = 'Hide Saved Predictions'; }
+    }
     if (panel.scrollIntoView) { panel.scrollIntoView({behavior: 'smooth', block: 'nearest'}); }
   }
   function mleAdvLeaveAsIs(btn) {
@@ -12729,10 +12762,16 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
     }
     if (!btn || !btn.classList) { return; }
     if (btn.classList.contains('mle-lottery-toggle')) { mleAdvToggleCard(btn); }
-    if (btn.classList.contains('mle-section-toggle')) {
+    if (btn.classList.contains('mle-section-toggle') || btn.classList.contains('mle-workspace-guide-toggle')) {
       var bodyId = btn.getAttribute('aria-controls');
       var body = bodyId ? document.getElementById(bodyId) : null;
-      if (!body) { return; }
+      if (!body) {
+        var errMsg = document.createElement('p');
+        errMsg.style.cssText = 'font-size:.82rem;color:#374151;margin:.5rem 0;padding:.5rem .75rem;background:#fef3c7;border:1px solid #fcd34d;border-radius:.375rem;';
+        errMsg.textContent = 'This section could not be opened because its target was not found.';
+        btn.parentNode.insertBefore(errMsg, btn.nextSibling);
+        return;
+      }
       var hidden = body.style.display === 'none' || body.style.display === '';
       body.style.display = hidden ? 'block' : 'none';
       body.setAttribute('aria-hidden', hidden ? 'false' : 'true');
@@ -12740,8 +12779,11 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
       var span = btn.querySelector('span');
       if (span) {
         var txt = span.textContent || '';
-        if (txt.indexOf('Show ') === 0) { span.textContent = txt.replace('Show ', 'Hide '); }
-        else if (txt.indexOf('Hide ') === 0) { span.textContent = txt.replace('Hide ', 'Show '); }
+        if (txt.indexOf('Show ') === 0) { span.textContent = 'Hide ' + txt.slice(5); }
+        else if (txt.indexOf('Hide ') === 0) { span.textContent = 'Show ' + txt.slice(5); }
+        else if (txt.indexOf('View ') === 0) { span.textContent = 'Hide ' + txt.slice(5); }
+        else if (txt === 'Expand') { span.textContent = 'Collapse'; }
+        else if (txt === 'Collapse') { span.textContent = 'Expand'; }
       }
     }
     if (btn.classList.contains('mle-review-runs-btn')) { mleAdvReviewRuns(btn); }
@@ -21839,8 +21881,9 @@ $__mleWheelFavCsrfField   = '<input type="hidden" name="' . htmlspecialchars($__
 .mle-advisory-card__collapsed-meta{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;font-size:.82rem;color:#7F8DAA}
 .mle-adv-meta-label{font-weight:700;color:#475569}
 .mle-adv-meta-sep{color:#d1d5e8;flex-shrink:0}
-.mle-lottery-toggle{display:inline-flex;align-items:center;font-size:.78rem;font-weight:700;padding:.35rem .85rem;border-radius:.375rem;border:1px solid #1C66FF;background:#fff;color:#1C66FF;cursor:pointer;white-space:nowrap;flex-shrink:0}
-.mle-lottery-toggle:hover{background:#1C66FF;color:#fff}
+.mle-workspace-guide-toggle,.mle-section-toggle,.mle-lottery-toggle{display:inline-flex;align-items:center;font-size:.82rem;font-weight:800;padding:10px 16px;border-radius:999px;border:1px solid rgba(127,141,170,0.35);background:#FFFFFF;color:#0A1A33;cursor:pointer;white-space:nowrap;min-height:44px;flex-shrink:0}
+.mle-workspace-guide-toggle:hover,.mle-section-toggle:hover,.mle-lottery-toggle:hover{background:#EFEFF5;color:#0A1A33}
+.mle-workspace-guide-toggle:focus,.mle-section-toggle:focus,.mle-lottery-toggle:focus{outline:3px solid rgba(28,102,255,0.35);outline-offset:2px}
 .mle-advisory-card__body{padding:1.25rem 1.35rem;border-top:1px solid #EFEFF5}
 /* Proof badge */
 .mle-proof-badge{display:inline-block;font-size:.72rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:.25rem .6rem;border-radius:1rem;white-space:nowrap}
@@ -21961,8 +22004,7 @@ html[data-mle-mode="advanced"] .mle-nonadvanced-only{display:none !important}
 .mle-adv-run-item--retire .mle-adv-run-item__status{background:#fee2e2;color:#991b1b}
 @media(max-width:640px){.mle-advisory-card__collapsed{flex-direction:column;align-items:flex-start}.mle-lottery-toggle{align-self:flex-start}.mle-adv-row{flex-direction:column;gap:.2rem}.mle-adv-row__label{min-width:0}.mle-leaderboard__meta{display:none}.mle-adv-cta-panel{padding:.85rem}.mle-advisory-card__collapsed-meta{flex-direction:column;align-items:flex-start;gap:.2rem}.mle-adv-meta-sep{display:none}.mle-adv-pred-summary__grid{grid-template-columns:repeat(2,1fr)}}
 .mle-adv-section-collapse{border-top:1px solid #EFEFF5;padding-top:.6rem}
-.mle-section-toggle{display:inline-flex;align-items:center;gap:.35rem;font-size:.8rem;font-weight:700;padding:.3rem .7rem;border-radius:.375rem;border:1px solid #dbe4f0;background:#f8fafc;color:#334155;cursor:pointer;white-space:nowrap}
-.mle-section-toggle:hover{background:#EFEFF5}
+.mle-section-toggle{gap:.35rem}
 .mle-section-body{padding:.6rem 0}
 .mle-adv-section-desc{font-size:.8rem;color:#64748b;margin:0 0 .5rem}
 .mle-adv-dr-group__date{font-size:.82rem;font-weight:700;color:#0A1A33;margin-bottom:.35rem;padding:.25rem .5rem;background:#f0f4ff;border-radius:.25rem;display:inline-block}
@@ -22028,43 +22070,8 @@ html[data-mle-mode="advanced"] .mle-nonadvanced-only{display:none !important}
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-  function S(str) {
-    return String(str).replace(/\[\[/g, '\u003c').replace(/\]\]/g, '\u003e');
-  }
-
-  var card = document.getElementById('info-card');
-  var btn  = document.getElementById('info-toggle');
-  if (!card || !btn) return; // defensive: missing DOM nodes
-
-  var key = 'myLottoExpertInfoOpen';
-
-  // read persisted state safely (handles private mode / exceptions)
-  var stored = null;
-  try { stored = localStorage.getItem(key); } catch (e) { stored = null; }
-
-  // default = whatever markup set (card has .open initially)
-  var isOpen = (stored === null) ? card.classList.contains('open') : (stored !== 'false');
-
-  if (!isOpen) {
-    card.classList.remove('open');
-    btn.textContent = '[+] Expand';
-    btn.setAttribute('aria-expanded', 'false');
-    btn.setAttribute('aria-label', 'Expand info');
-  } else {
-    btn.textContent = '[-] Collapse';
-    btn.setAttribute('aria-expanded', 'true');
-    btn.setAttribute('aria-label', 'Collapse info');
-  }
-
-  btn.addEventListener('click', function() {
-    var open = card.classList.toggle('open');
-    try { localStorage.setItem(key, open ? 'true' : 'false'); } catch (e) {}
-    btn.textContent = open ? '[-] Collapse' : '[+] Expand';
-    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    btn.setAttribute('aria-label', open ? 'Collapse info' : 'Expand info');
-  });
-});
+/* info-toggle handler removed: workspace guide button now uses mle-workspace-guide-toggle mle-section-toggle
+   and is handled by the unified delegated click handler above. */
 
 /* ===== merged script section ===== */
 
