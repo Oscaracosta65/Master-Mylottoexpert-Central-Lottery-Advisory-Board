@@ -3291,11 +3291,15 @@ function mleAdvisoryFormatSettingLabel($key) {
         'ai_blend_pct'          => 'Blend Setting',
         'blend_pct'             => 'Blend Setting',
         'ai_percent'            => 'Blend Setting',
+        'skai_blend_ai_pct'     => 'Blend Setting',
+        'skai_blend_skip_pct'   => 'Blend Setting',
         'epochs'                => 'Training Cycles',
         'window_size'           => 'History Window',
+        'skai_window_size'      => 'History Window',
         'draws_analyzed'        => 'Past Draws Checked',
         'learning_rate'         => 'Learning Speed',
         'dropout'               => 'Overthinking Protection',
+        'dropout_rate'          => 'Overthinking Protection',
         'hidden_layers'         => 'Pattern Depth',
         'recency_decay'         => 'Recent Draw Focus',
         'sampling_temperature'  => 'Variety Level',
@@ -3304,13 +3308,19 @@ function mleAdvisoryFormatSettingLabel($key) {
         'best_window'           => 'Best History Search',
         'auto_tune'             => 'Auto Adjust',
         'top_n_numbers'         => 'Number Pool Size',
+        'skai_top_n_numbers'    => 'Number Pool Size',
         'top_n_combos'          => 'Combo Pool Size',
+        'skai_top_n_combos'     => 'Combo Pool Size',
         'chain_length'          => 'Sampling Depth',
+        'chain_len'             => 'Sampling Depth',
         'burn_in'               => 'Warm-Up Runs',
         'laplace_k'             => 'Smoothing Level',
         'frequency_weight'      => 'Frequency Weight',
+        'freq_weight'           => 'Frequency Weight',
         'skip_weight'           => 'Skip Timing Weight',
+        'hist_weight'           => 'History Weight',
         'history_weight'        => 'History Weight',
+        'skip_window'           => 'Gap Timing',
     );
     $key = strtolower(trim((string)$key));
     return isset($map[$key]) ? $map[$key] : ucwords(str_replace('_', ' ', $key));
@@ -3366,12 +3376,12 @@ function mleAdvisoryComputeMethodLeaderboard($db, $userId, $lotteryId) {
         $cols = $db->loadColumn();
         $hasAdviceStatus = in_array('advice_status', is_array($cols) ? $cols : array(), true);
     } catch (\Throwable $e) {}
-    $where = "WHERE `user_id` = {$userId} AND (`lottery_id` = {$lotteryId} OR `target_lottery_id` = {$lotteryId}) AND `hits` >= 0 AND `avg_rank` > 0";
+    $where = "WHERE `user_id` = {$userId} AND (`lottery_id` = {$lotteryId} OR `target_lottery_id` = {$lotteryId}) AND `avg_winning_rank` IS NOT NULL";
     if ($hasAdviceStatus) {
         $where .= " AND (`advice_status` IS NULL OR `advice_status` <> 'archived')";
     }
     try {
-        $db->setQuery("SELECT `source`, `hits`, `top10_hits`, `top20_hits`, `avg_rank`, `missing_count`, `draw_date` FROM {$perfTable} {$where} ORDER BY `draw_date` DESC, `run_date` DESC LIMIT 200");
+        $db->setQuery("SELECT `source`, `top10_hits`, `top20_hits`, `avg_winning_rank`, `missing_hits_count`, `weighted_quality_score`, `draw_date` FROM {$perfTable} {$where} ORDER BY `draw_date` DESC, `run_date` DESC LIMIT 200");
         $rows = $db->loadAssocList() ?: array();
     } catch (\Throwable $e) { return $empty; }
     if (empty($rows)) { return $empty; }
@@ -3383,12 +3393,13 @@ function mleAdvisoryComputeMethodLeaderboard($db, $userId, $lotteryId) {
         $dd = (string)($row['draw_date'] ?? '');
         if ($dd !== '') { $drawDates[$dd] = 1; }
         if (!isset($methods[$src])) {
-            $methods[$src] = array('hits_total' => 0, 'top10_total' => 0, 'rank_sum' => 0.0, 'missing_sum' => 0, 'run_count' => 0, 'draw_dates' => array());
+            $methods[$src] = array('hits_total' => 0, 'top20_total' => 0, 'rank_sum' => 0.0, 'missing_sum' => 0, 'quality_sum' => 0.0, 'run_count' => 0, 'draw_dates' => array());
         }
-        $methods[$src]['hits_total']  += (int)($row['hits'] ?? 0);
-        $methods[$src]['top10_total'] += (int)($row['top10_hits'] ?? 0);
-        $methods[$src]['rank_sum']    += (float)($row['avg_rank'] ?? 0);
-        $methods[$src]['missing_sum'] += (int)($row['missing_count'] ?? 0);
+        $methods[$src]['hits_total']  += (int)($row['top10_hits'] ?? 0);
+        $methods[$src]['top20_total'] += (int)($row['top20_hits'] ?? 0);
+        $methods[$src]['rank_sum']    += (float)($row['avg_winning_rank'] ?? 0);
+        $methods[$src]['missing_sum'] += (int)($row['missing_hits_count'] ?? 0);
+        $methods[$src]['quality_sum'] += (float)($row['weighted_quality_score'] ?? 0);
         $methods[$src]['run_count']++;
         if ($dd !== '') { $methods[$src]['draw_dates'][$dd] = 1; }
     }
@@ -3396,19 +3407,21 @@ function mleAdvisoryComputeMethodLeaderboard($db, $userId, $lotteryId) {
     $totalRuns  = count($rows);
     $scored     = array();
     foreach ($methods as $src => $m) {
-        $cnt     = max(1, $m['run_count']);
-        $avgHits = round($m['hits_total'] / $cnt, 2);
-        $avgRank = round($m['rank_sum']   / $cnt, 2);
-        $avgTop10 = round($m['top10_total'] / $cnt, 2);
+        $cnt        = max(1, $m['run_count']);
+        $avgHits    = round($m['hits_total']  / $cnt, 2);
+        $avgTop20   = round($m['top20_total'] / $cnt, 2);
+        $avgRank    = round($m['rank_sum']    / $cnt, 2);
         $avgMissing = round($m['missing_sum'] / $cnt, 2);
-        $score = ($avgHits * 3.0) + ($avgTop10 * 1.5) - ($avgRank * 0.5) - ($avgMissing * 0.5);
+        $avgQuality = round($m['quality_sum'] / $cnt, 4);
+        $score = ($avgHits * 3.0) + ($avgTop20 * 1.5) - ($avgRank * 0.5) - ($avgMissing * 0.5);
+        if ($avgQuality > 0) { $score += $avgQuality * 2.0; }
         $scored[] = array(
             'method'       => $src,
             'method_label' => mleAdvisoryMethodLabel($src),
             'score'        => $score,
             'avg_hits'     => $avgHits,
             'avg_rank'     => $avgRank,
-            'avg_top10'    => $avgTop10,
+            'avg_top20'    => $avgTop20,
             'avg_missing'  => $avgMissing,
             'total_hits'   => (int)$m['hits_total'],
             'run_count'    => (int)$m['run_count'],
@@ -3458,10 +3471,21 @@ function mleAdvisoryComputeSettingsAdvisor($db, $userId, $lotteryId, $method = '
         $cols = $db->loadColumn();
         $hasAdviceStatus = in_array('advice_status', is_array($cols) ? $cols : array(), true);
     } catch (\Throwable $e) {}
-    $where = "WHERE `user_id` = {$userId} AND (`lottery_id` = {$lotteryId} OR `target_lottery_id` = {$lotteryId}) AND `source` IN ({$sourceList}) AND `hits` >= 0 AND `avg_rank` > 0 AND `settings_json` IS NOT NULL AND `settings_json` <> ''";
-    if ($hasAdviceStatus) { $where .= " AND (`advice_status` IS NULL OR `advice_status` = 'use_in_advice')"; }
+    $where = "WHERE slp.`user_id` = {$userId} AND (slp.`lottery_id` = {$lotteryId} OR slp.`target_lottery_id` = {$lotteryId}) AND slp.`source` IN ({$sourceList}) AND slp.`avg_winning_rank` IS NOT NULL";
+    if ($hasAdviceStatus) { $where .= " AND (slp.`advice_status` IS NULL OR slp.`advice_status` = 'use_in_advice')"; }
+    $snTable   = '`' . $prefix . 'user_saved_numbers`';
     try {
-        $db->setQuery("SELECT `hits`, `top10_hits`, `avg_rank`, `missing_count`, `settings_json`, `run_score` FROM {$perfTable} {$where} ORDER BY `draw_date` DESC LIMIT 60");
+        $sql = "SELECT slp.`top10_hits`, slp.`top20_hits`, slp.`avg_winning_rank`, slp.`missing_hits_count`, slp.`weighted_quality_score`,"
+             . " sn.`epochs`, sn.`skai_blend_ai_pct`, sn.`skai_blend_skip_pct`, sn.`draws_analyzed`, sn.`learning_rate`,"
+             . " sn.`dropout_rate`, sn.`hidden_layers`, sn.`recency_decay`, sn.`sampling_temperature`, sn.`diversity_penalty`,"
+             . " sn.`gap_scale`, sn.`skai_top_n_numbers`, sn.`skai_top_n_combos`, sn.`chain_len`, sn.`burn_in`,"
+             . " sn.`laplace_k`, sn.`auto_tune`, sn.`best_window`, sn.`skai_window_size`, sn.`skip_window`,"
+             . " sn.`draws_used`, sn.`settings_json`"
+             . " FROM {$perfTable} slp"
+             . " LEFT JOIN {$snTable} sn ON sn.`id` = slp.`run_id` AND sn.`user_id` = slp.`user_id`"
+             . " {$where}"
+             . " ORDER BY slp.`draw_date` DESC LIMIT 60";
+        $db->setQuery($sql);
         $rows = $db->loadAssocList() ?: array();
     } catch (\Throwable $e) { return $noAdvice; }
     if (count($rows) < 4) {
@@ -3470,16 +3494,27 @@ function mleAdvisoryComputeSettingsAdvisor($db, $userId, $lotteryId, $method = '
     }
     $scored = array();
     foreach ($rows as $row) {
-        $hits    = (int)($row['hits'] ?? 0);
         $top10   = (int)($row['top10_hits'] ?? 0);
-        $rank    = (float)($row['avg_rank'] ?? 999);
-        $missing = (int)($row['missing_count'] ?? 0);
-        $rs      = (float)($row['run_score'] ?? 0);
-        $composite = $rs > 0 ? $rs : (($hits * 3.0) + ($top10 * 1.5) - ($rank * 0.3) - ($missing * 0.5));
-        $settings  = array();
+        $top20   = (int)($row['top20_hits'] ?? 0);
+        $rank    = (float)($row['avg_winning_rank'] ?? 999);
+        $missing = (int)($row['missing_hits_count'] ?? 0);
+        $quality = (float)($row['weighted_quality_score'] ?? 0);
+        $composite = ($quality > 0) ? ($quality * 10.0) : (($top10 * 3.0) + ($top20 * 1.5) - ($rank * 0.3) - ($missing * 0.5));
+        // Build settings from joined sn.* columns, falling back to settings_json
+        $settings = array();
         if (!empty($row['settings_json'])) {
             $decoded = json_decode($row['settings_json'], true);
             if (is_array($decoded)) { $settings = $decoded; }
+        }
+        // Overlay direct sn columns (they take precedence as ground-truth values)
+        $snDirectKeys = array('epochs','skai_blend_ai_pct','skai_blend_skip_pct','draws_analyzed','learning_rate',
+            'dropout_rate','hidden_layers','recency_decay','sampling_temperature','diversity_penalty',
+            'gap_scale','skai_top_n_numbers','skai_top_n_combos','chain_len','burn_in',
+            'laplace_k','auto_tune','best_window','skai_window_size','skip_window');
+        foreach ($snDirectKeys as $snk) {
+            if (isset($row[$snk]) && $row[$snk] !== null && $row[$snk] !== '') {
+                $settings[$snk] = $row[$snk];
+            }
         }
         $scored[] = array('composite' => $composite, 'settings' => $settings);
     }
@@ -3488,7 +3523,8 @@ function mleAdvisoryComputeSettingsAdvisor($db, $userId, $lotteryId, $method = '
     $cutoff  = max(1, (int)floor($total * 0.4));
     $strongRuns = array_slice($scored, 0, $cutoff);
     $weakRuns   = array_slice($scored, -$cutoff);
-    $numericKeys = array('epochs','window_size','draws_analyzed','ai_blend_pct','blend_pct','sampling_temperature','diversity_penalty','gap_scale','learning_rate','top_n_numbers','chain_length','burn_in');
+    // Use actual sn.* column names as the keys to compare
+    $numericKeys = array('epochs','skai_window_size','draws_analyzed','skai_blend_ai_pct','sampling_temperature','diversity_penalty','gap_scale','learning_rate','dropout_rate','hidden_layers','recency_decay','skai_top_n_numbers','skai_top_n_combos','chain_len','burn_in','laplace_k','best_window');
     $bestSetting = ''; $bestCurrentVal = ''; $bestSuggestedVal = ''; $bestReason = ''; $bestDiff = 0.0;
     foreach ($numericKeys as $key) {
         $strongVals = array(); $weakVals = array();
@@ -3533,25 +3569,25 @@ function mleAdvisoryBuildBatchCleanupRecommendation($db, $userId, $lotteryId) {
     $prefix    = $db->getPrefix();
     $perfTable = '`' . $prefix . 'skai_learning_performance`';
     try {
-        $db->setQuery("SELECT `draw_date`, COUNT(*) AS run_count FROM {$perfTable} WHERE `user_id` = {$userId} AND (`lottery_id` = {$lotteryId} OR `target_lottery_id` = {$lotteryId}) AND `hits` >= 0 AND `avg_rank` > 0 GROUP BY `draw_date` HAVING COUNT(*) >= 9 ORDER BY `draw_date` DESC LIMIT 1");
+        $db->setQuery("SELECT `draw_date`, COUNT(*) AS run_count FROM {$perfTable} WHERE `user_id` = {$userId} AND (`lottery_id` = {$lotteryId} OR `target_lottery_id` = {$lotteryId}) AND `avg_winning_rank` IS NOT NULL GROUP BY `draw_date` HAVING COUNT(*) >= 9 ORDER BY `draw_date` DESC LIMIT 1");
         $drawRow = $db->loadAssoc();
     } catch (\Throwable $e) { return $noRec; }
     if (empty($drawRow)) { return $noRec; }
     $drawDate = (string)$drawRow['draw_date'];
     try {
-        $db->setQuery("SELECT `id`, `source`, `hits`, `top10_hits`, `avg_rank`, `missing_count`, `run_score` FROM {$perfTable} WHERE `user_id` = {$userId} AND (`lottery_id` = {$lotteryId} OR `target_lottery_id` = {$lotteryId}) AND `draw_date` = " . $db->quote($drawDate) . " AND `hits` >= 0 AND `avg_rank` > 0 ORDER BY `hits` DESC, `top10_hits` DESC, `avg_rank` ASC");
+        $db->setQuery("SELECT `id`, `source`, `top10_hits`, `top20_hits`, `avg_winning_rank`, `missing_hits_count`, `weighted_quality_score` FROM {$perfTable} WHERE `user_id` = {$userId} AND (`lottery_id` = {$lotteryId} OR `target_lottery_id` = {$lotteryId}) AND `draw_date` = " . $db->quote($drawDate) . " AND `avg_winning_rank` IS NOT NULL ORDER BY `top10_hits` DESC, `avg_winning_rank` ASC");
         $runs = $db->loadAssocList() ?: array();
     } catch (\Throwable $e) { return $noRec; }
     if (count($runs) < 9) { return $noRec; }
     $scoredRuns = array();
     foreach ($runs as $run) {
-        $hits    = (int)($run['hits'] ?? 0);
         $top10   = (int)($run['top10_hits'] ?? 0);
-        $rank    = (float)($run['avg_rank'] ?? 999);
-        $missing = (int)($run['missing_count'] ?? 0);
-        $rs      = (float)($run['run_score'] ?? 0);
-        $composite = $rs > 0 ? $rs : (($hits * 3.0) + ($top10 * 1.5) - ($rank * 0.3) - ($missing * 0.5));
-        $scoredRuns[] = array('id' => (int)$run['id'], 'source' => (string)($run['source'] ?? ''), 'hits' => $hits, 'top10_hits' => $top10, 'avg_rank' => $rank, 'missing_count' => $missing, 'composite' => $composite);
+        $top20   = (int)($run['top20_hits'] ?? 0);
+        $rank    = (float)($run['avg_winning_rank'] ?? 999);
+        $missing = (int)($run['missing_hits_count'] ?? 0);
+        $quality = (float)($run['weighted_quality_score'] ?? 0);
+        $composite = $quality > 0 ? ($quality * 10.0) : (($top10 * 3.0) + ($top20 * 1.5) - ($rank * 0.3) - ($missing * 0.5));
+        $scoredRuns[] = array('id' => (int)$run['id'], 'source' => (string)($run['source'] ?? ''), 'top10_hits' => $top10, 'top20_hits' => $top20, 'avg_winning_rank' => $rank, 'missing_hits_count' => $missing, 'composite' => $composite);
     }
     usort($scoredRuns, function($a, $b) { return ($b['composite'] > $a['composite']) ? 1 : (($b['composite'] < $a['composite']) ? -1 : 0); });
     $total       = count($scoredRuns);
@@ -3609,7 +3645,7 @@ function mleAdvisoryLoadAllLotteryCards($db, $userId) {
     $prefix    = $db->getPrefix();
     $perfTable = '`' . $prefix . 'skai_learning_performance`';
     try {
-        $db->setQuery("SELECT DISTINCT `lottery_id`, `lottery_name` FROM {$perfTable} WHERE `user_id` = {$userId} AND `hits` >= 0 AND `avg_rank` > 0 ORDER BY `lottery_name` ASC LIMIT 20");
+        $db->setQuery("SELECT DISTINCT `lottery_id`, `lottery_name` FROM {$perfTable} WHERE `user_id` = {$userId} AND `avg_winning_rank` IS NOT NULL ORDER BY `lottery_name` ASC LIMIT 20");
         $lotteries = $db->loadAssocList() ?: array();
     } catch (\Throwable $e) { return array('has_any_data' => false, 'cards' => array(), 'total_lotteries' => 0); }
     if (empty($lotteries)) { return array('has_any_data' => false, 'cards' => array(), 'total_lotteries' => 0); }
