@@ -4260,8 +4260,7 @@ function mleAdvisoryAttachPerformanceToActiveEvidence($db, $userId, array $activ
             $ptid = (int)($pr['prediction_target_id'] ?? 0);
             if ($lid === 0 && $ptid > 0 && isset($allTargetIds[$ptid]))                                                     { $lid = $allTargetIds[$ptid]; }
             if ($lid === 0 && !empty($pr['prediction_target_key']) && isset($allTargetKeys[(string)$pr['prediction_target_key']])) { $lid = $allTargetKeys[(string)$pr['prediction_target_key']]; }
-            // Last resort: use lottery_id column on the performance row itself
-            if ($lid === 0) { $lid = (int)($pr['lottery_id'] ?? 0); }
+            // If no identity key resolved to an active lottery, this row is learning history only - skip it.
             if ($lid <= 0) { continue; }
             if (!isset($matched[$lid])) { $matched[$lid] = array(); }
             $matched[$lid][] = $pr;
@@ -5060,17 +5059,22 @@ if ($__mleAction === 'apply_evidence_choices') {
     $snTable   = $db->quoteName($prefix . 'user_saved_numbers');
     $updated   = 0;
 
-    // Helper: also sync advice_status to user_saved_numbers via run_id
-    $__mleApplySavedNumbersStatus = function($perfId, $status) use ($db, $prefix, $workspaceUserId, $snTable) {
+    // Check once whether advice_status column exists on user_saved_numbers
+    $__mleSNHasAdviceStatus = false;
+    try {
+        $snColsRaw = $db->getTableColumns('#__user_saved_numbers', false);
+        $snCols = is_array($snColsRaw) ? array_keys($snColsRaw) : array();
+        $__mleSNHasAdviceStatus = in_array('advice_status', $snCols, true);
+    } catch (\Throwable $e) {}
+
+    // Helper: also sync advice_status to user_saved_numbers via run_id (skai_learning_performance.run_id -> user_saved_numbers.id)
+    $__mleApplySavedNumbersStatus = function($perfId, $status) use ($db, $prefix, $workspaceUserId, $snTable, $__mleSNHasAdviceStatus) {
+        if (!$__mleSNHasAdviceStatus) { return; }
         try {
             $rawPerf = $db->getPrefix() . 'skai_learning_performance';
             $db->setQuery("SELECT `run_id` FROM `{$rawPerf}` WHERE `id` = " . (int)$perfId . " AND `user_id` = " . (int)$workspaceUserId . " LIMIT 1");
             $runId = (int)$db->loadResult();
             if ($runId <= 0) { return; }
-            // Only update if advice_status column exists on user_saved_numbers
-            $snColsRaw = $db->getTableColumns('#__user_saved_numbers', false);
-            $snCols = is_array($snColsRaw) ? array_keys($snColsRaw) : array();
-            if (!in_array('advice_status', $snCols, true)) { return; }
             $q2 = $db->getQuery(true)
                 ->update($snTable)
                 ->set($db->quoteName('advice_status') . ' = ' . $db->quote($status))
@@ -11853,8 +11857,6 @@ $__mleModeHelperText = array(
   <span class="mle-quick-nav__label">Jump to:</span>
   <a href="#info-card">Overview</a>
   <a href="#skai-global-snapshot" class="mle-quick-nav__advanced">Snapshot</a>
-  <a href="#mle-historical-validation-wrap">Draw Results</a>
-  <a href="#saved-predictions" class="mle-quick-nav__advanced">Saved Predictions</a>
   <a href="#my-lotteries">My Lotteries</a>
   <a href="#numbers-to-play">Numbers to Play</a>
   <a href="#favorite-lotteries">Favorite Lotteries</a>
@@ -12047,7 +12049,6 @@ $__mleModeHelperText = array(
   <span class="mle-section-jump__label">Jump to</span>
   <div class="mle-section-jump__links">
     <a href="#info-card">Overview</a>
-    <a href="#mle-historical-validation-wrap">Draw Results</a>
     <a href="#my-lotteries">My Lotteries</a>
     <a href="#numbers-to-play">Numbers to Play</a>
     <a href="#favorite-lotteries">Favorite Lotteries</a>
@@ -21030,7 +21031,6 @@ if (!empty($settingLabels)) {
     <span class="mle-section-jump__label">Jump to</span>
     <div class="mle-section-jump__links">
       <a href="#info-card">Overview</a>
-      <a href="#mle-historical-validation-wrap">Draw Results</a>
       <a href="#my-lotteries">My Lotteries</a>
       <a href="#numbers-to-play">Numbers to Play</a>
       <a href="#favorite-lotteries">Favorite Lotteries</a>
@@ -21385,7 +21385,6 @@ $savedSettings = $db->loadAssocList() ?: [];
     <span class="mle-section-jump__label">Jump to</span>
     <div class="mle-section-jump__links">
       <a href="#info-card">Overview</a>
-      <a href="#mle-historical-validation-wrap">Draw Results</a>
       <a href="#my-lotteries">My Lotteries</a>
       <a href="#numbers-to-play">Numbers to Play</a>
       <a href="#favorite-lotteries">Favorite Lotteries</a>
@@ -21715,8 +21714,6 @@ $__mleWheelFavCsrfField   = '<input type="hidden" name="' . htmlspecialchars($__
 .mle-advisory-card__collapsed-meta{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;font-size:.82rem;color:#7F8DAA}
 .mle-adv-meta-label{font-weight:700;color:#475569}
 .mle-adv-meta-sep{color:#d1d5e8;flex-shrink:0}
-.mle-adv-expand-btn{display:inline-flex;align-items:center;font-size:.78rem;font-weight:700;padding:.35rem .85rem;border-radius:.375rem;border:1px solid #1C66FF;background:#fff;color:#1C66FF;cursor:pointer;white-space:nowrap;flex-shrink:0}
-.mle-adv-expand-btn:hover{background:#1C66FF;color:#fff}
 .mle-lottery-toggle{display:inline-flex;align-items:center;font-size:.78rem;font-weight:700;padding:.35rem .85rem;border-radius:.375rem;border:1px solid #1C66FF;background:#fff;color:#1C66FF;cursor:pointer;white-space:nowrap;flex-shrink:0}
 .mle-lottery-toggle:hover{background:#1C66FF;color:#fff}
 .mle-advisory-card__body{padding:1.25rem 1.35rem;border-top:1px solid #EFEFF5}
@@ -21837,7 +21834,7 @@ html[data-mle-mode="advanced"] .mle-nonadvanced-only{display:none !important}
 .mle-adv-run-item--keep .mle-adv-run-item__status{background:#d1fae5;color:#065f46}
 .mle-adv-run-item--watch .mle-adv-run-item__status{background:#fef3c7;color:#92400e}
 .mle-adv-run-item--retire .mle-adv-run-item__status{background:#fee2e2;color:#991b1b}
-@media(max-width:640px){.mle-advisory-card__collapsed{flex-direction:column;align-items:flex-start}.mle-adv-expand-btn{align-self:flex-start}.mle-lottery-toggle{align-self:flex-start}.mle-adv-row{flex-direction:column;gap:.2rem}.mle-adv-row__label{min-width:0}.mle-leaderboard__meta{display:none}.mle-adv-cta-panel{padding:.85rem}.mle-advisory-card__collapsed-meta{flex-direction:column;align-items:flex-start;gap:.2rem}.mle-adv-meta-sep{display:none}.mle-adv-pred-summary__grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:640px){.mle-advisory-card__collapsed{flex-direction:column;align-items:flex-start}.mle-lottery-toggle{align-self:flex-start}.mle-adv-row{flex-direction:column;gap:.2rem}.mle-adv-row__label{min-width:0}.mle-leaderboard__meta{display:none}.mle-adv-cta-panel{padding:.85rem}.mle-advisory-card__collapsed-meta{flex-direction:column;align-items:flex-start;gap:.2rem}.mle-adv-meta-sep{display:none}.mle-adv-pred-summary__grid{grid-template-columns:repeat(2,1fr)}}
 .mle-adv-section-collapse{border-top:1px solid #EFEFF5;padding-top:.6rem}
 .mle-section-toggle{display:inline-flex;align-items:center;gap:.35rem;font-size:.8rem;font-weight:700;padding:.3rem .7rem;border-radius:.375rem;border:1px solid #dbe4f0;background:#f8fafc;color:#334155;cursor:pointer;white-space:nowrap}
 .mle-section-toggle:hover{background:#EFEFF5}
@@ -21858,7 +21855,6 @@ html[data-mle-mode="advanced"] .mle-nonadvanced-only{display:none !important}
     <span class="mle-section-jump__label">Jump to</span>
     <div class="mle-section-jump__links">
       <a href="#info-card">Overview</a>
-      <a href="#mle-historical-validation-wrap">Draw Results</a>
       <a href="#my-lotteries">My Lotteries</a>
       <a href="#numbers-to-play">Numbers to Play</a>
       <a href="#favorite-lotteries">Favorite Lotteries</a>
