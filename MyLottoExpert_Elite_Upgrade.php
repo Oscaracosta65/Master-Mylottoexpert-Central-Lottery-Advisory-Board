@@ -2531,7 +2531,7 @@ function skaiLpTrendIntelligence($delta)
             'direction' => 'unknown',
             'strength'  => '',
             'label'     => 'Not enough data for a trend',
-            'arrow'     => '&#8212;',
+            'arrow'     => '--',
         );
     }
     $abs = abs((float)$delta);
@@ -2550,7 +2550,7 @@ function skaiLpTrendIntelligence($delta)
             'direction' => 'flat',
             'strength'  => 'minimal',
             'label'     => 'No significant change',
-            'arrow'     => '&#8594;',
+            'arrow'     => '(flat)',
         );
     }
 
@@ -2564,14 +2564,14 @@ function skaiLpTrendIntelligence($delta)
             'direction' => 'improving',
             'strength'  => $strength,
             'label'     => $strength . ' Improvement',
-            'arrow'     => '&#8593;',
+            'arrow'     => '(up)',
         );
     }
     return array(
         'direction' => 'declining',
         'strength'  => $strength,
         'label'     => $strength . ' Decline',
-        'arrow'     => '&#8595;',
+        'arrow'     => '(dn)',
     );
 }
 
@@ -3689,38 +3689,51 @@ function mleAdvisoryBuildLotteryCard($db, $userId, $lotteryId, $lotteryName = ''
     $proofKey       = $proofLevel['level'] ?? 'too_early';
     $hasSettingsAdv = !empty($settingsAdv['has_advice']);
     $settingLabel   = !empty($settingsAdv['setting_label']) ? (string)$settingsAdv['setting_label'] : '';
-    // Plain-language "what to do" sentence
+    // Decision statement (imperative, premium-advisor style)
+    // why_support: one sentence explaining the evidence basis
     switch ($proofKey) {
         case 'trusted_recipe':
-            $whatToDo = $hasSettingsAdv
+            $decision    = 'Stay with ' . $topMethodLabel . ' for now.';
+            $whySupport  = $topMethodLabel . ' has the strongest confirmed pattern across your completed draws.';
+            $whatToDo    = $hasSettingsAdv
                 ? 'Keep running ' . $topMethodLabel . ' and try the one setting change shown below.'
                 : 'Stay with ' . $topMethodLabel . ' for the next draw. The pattern is confirmed.';
-            $nextStep = $topMethodLabel . ' has repeated support. Keep using it and refine one setting at a time.';
+            $nextStep    = $topMethodLabel . ' has repeated support. Keep using it and refine one setting at a time.';
             break;
         case 'strong_pattern':
-            $whatToDo = $hasSettingsAdv
+            $decision    = 'Stay with ' . $topMethodLabel . ' for now.';
+            $whySupport  = $topMethodLabel . ' has the strongest completed-draw support for this lottery.';
+            $whatToDo    = $hasSettingsAdv
                 ? 'Stay with ' . $topMethodLabel . ' and test the suggested ' . ($settingLabel !== '' ? $settingLabel . ' change' : 'setting change') . ' below.'
                 : 'Keep running ' . $topMethodLabel . '. Evidence is building. No setting change needed yet.';
-            $nextStep = 'Clear patterns are emerging. Consider testing the Settings Advisor recommendation.';
+            $nextStep    = 'Clear patterns are emerging. Consider testing the Settings Advisor recommendation.';
             break;
         case 'good_test':
-            $whatToDo = $hasSettingsAdv
+            $decision    = 'Keep testing ' . $topMethodLabel . ' for now.';
+            $whySupport  = $topMethodLabel . ' is showing the best early results across your completed draws.';
+            $whatToDo    = $hasSettingsAdv
                 ? 'Run ' . $topMethodLabel . ' one more draw, then try the ' . ($settingLabel !== '' ? $settingLabel . ' change' : 'setting change') . ' below.'
                 : 'Keep running ' . $topMethodLabel . ' for at least one more draw before changing any settings.';
-            $nextStep = 'Enough evidence to try one careful setting change. Save a test recipe before making changes.';
+            $nextStep    = 'Enough evidence to try one careful setting change. Save a test recipe before making changes.';
             break;
         case 'close_race':
-            $secondLabel = count($methods) > 1 ? mleAdvisoryMethodLabel($methods[1]['method']) : 'the other method';
-            $whatToDo = 'Run both ' . $topMethodLabel . ' and ' . $secondLabel . ' for at least two more draws before choosing one.';
-            $nextStep = 'Two methods are close. Run both for a few more draws before choosing one.';
+            $secondLabel = count($methods) > 1 ? mleAdvisoryMethodLabel($methods[1]['method']) : 'the second method';
+            $decision    = 'Run both ' . $topMethodLabel . ' and ' . $secondLabel . ' for two more draws.';
+            $whySupport  = $topMethodLabel . ' and ' . $secondLabel . ' are very close. More draws are needed before choosing one.';
+            $whatToDo    = 'Run both ' . $topMethodLabel . ' and ' . $secondLabel . ' for at least two more draws before choosing one.';
+            $nextStep    = 'Two methods are close. Run both for a few more draws before choosing one.';
             break;
         case 'early_clue':
-            $whatToDo = 'Keep running ' . $topMethodLabel . '. LottoExpert needs more completed draws to confirm this direction.';
-            $nextStep = 'Keep saving runs for this lottery. LottoExpert needs more completed draws to give stronger guidance.';
+            $decision    = 'Keep building evidence with ' . $topMethodLabel . '.';
+            $whySupport  = $topMethodLabel . ' is showing early signs, but LottoExpert needs more completed draws to confirm this direction.';
+            $whatToDo    = 'Keep running ' . $topMethodLabel . '. LottoExpert needs more completed draws to confirm this direction.';
+            $nextStep    = 'Keep saving runs for this lottery. LottoExpert needs more completed draws to give stronger guidance.';
             break;
         default:
-            $whatToDo = 'Save and complete at least 3 prediction runs for this lottery before LottoExpert can give strong advice.';
-            $nextStep = 'Save more prediction runs and let them complete their target draws to start building advisory history.';
+            $decision    = 'Save at least 3 completed runs to receive advice.';
+            $whySupport  = 'LottoExpert needs scored results from at least 3 completed draws to begin giving reliable guidance.';
+            $whatToDo    = 'Save and complete at least 3 prediction runs for this lottery before LottoExpert can give strong advice.';
+            $nextStep    = 'Save more prediction runs and let them complete their target draws to start building advisory history.';
             break;
     }
     // Per-method plain opinion for Beginner Mode
@@ -3737,8 +3750,30 @@ function mleAdvisoryBuildLotteryCard($db, $userId, $lotteryId, $lotteryName = ''
         } else {
             $opinion = 'Not leading right now';
         }
-        $methodOpinions[] = array('method_label' => $m['method_label'], 'opinion' => $opinion);
+        $methodOpinions[] = array('method_label' => $m['method_label'], 'opinion' => $opinion, 'method_key' => $m['method']);
     }
+    // Find best run_id from skai_learning_performance so the save_advisory_recipe handler
+    // can resolve the full base settings via mylottoexpertResolveEffectiveSettings()
+    $baseRunId = 0;
+    $methodSrcsForBase = array(
+        'skai'     => array('skai_prediction', 'skai_blend', 'skai'),
+        'ai'       => array('ai_prediction', 'ai'),
+        'mcmc'     => array('mcmc_prediction', 'mcmc'),
+        'skip_hit' => array('skip', 'skip_hit', 'skiphit'),
+        'skip'     => array('skip', 'skip_hit', 'skiphit'),
+    );
+    $topKey = strtolower(trim((string)($topMethod['method'] ?? '')));
+    $baseSources = isset($methodSrcsForBase[$topKey]) ? $methodSrcsForBase[$topKey] : array($topKey);
+    try {
+        $pfx         = $db->getPrefix();
+        $perfTbl     = '`' . $pfx . 'skai_learning_performance`';
+        $srcListBase = implode(',', array_map(function($s) use ($db) { return $db->quote($s); }, $baseSources));
+        $db->setQuery("SELECT `run_id` FROM {$perfTbl} WHERE `user_id` = {$userId} AND (`lottery_id` = {$lotteryId} OR `target_lottery_id` = {$lotteryId}) AND `source` IN ({$srcListBase}) AND `avg_winning_rank` IS NOT NULL ORDER BY `weighted_quality_score` DESC, `top10_hits` DESC LIMIT 1");
+        $baseRunRow = $db->loadAssoc();
+        if (!empty($baseRunRow) && (int)$baseRunRow['run_id'] > 0) {
+            $baseRunId = (int)$baseRunRow['run_id'];
+        }
+    } catch (\Throwable $e) {}
     $batchCleanup = mleAdvisoryBuildBatchCleanupRecommendation($db, $userId, $lotteryId);
     $stats = $leaderboard['stats'] ?? array();
     return array(
@@ -3752,6 +3787,9 @@ function mleAdvisoryBuildLotteryCard($db, $userId, $lotteryId, $lotteryName = ''
         'proof_level'     => $proofLevel,
         'next_step'       => $nextStep,
         'what_to_do'      => $whatToDo,
+        'decision'        => $decision,
+        'why_support'     => $whySupport,
+        'base_run_id'     => $baseRunId,
         'stats'           => array('total_runs' => (int)($stats['total_runs'] ?? 0), 'completed_draws' => (int)($stats['total_draws'] ?? 0), 'active_methods' => (int)($stats['method_count'] ?? 0)),
         'batch_cleanup'   => ($batchCleanup['has_recommendation'] ?? false) ? $batchCleanup : null,
     );
@@ -4152,12 +4190,15 @@ if ($__mleAction === 'save_advisory_recipe') {
     $__advReason       = trim($app->input->getString('reason', ''));
     $__advProofLabel   = trim($app->input->getString('proof_label', ''));
     $__advBaseId       = $app->input->getInt('base_recipe_id', 0);
-    if ($__advLotteryId <= 0 || empty($__advMethod) || empty($__advSettingKey)) {
+    $__advBaseRunId    = $app->input->getInt('base_run_id', 0);
+    if ($__advLotteryId <= 0 || empty($__advMethod)) {
         $app->enqueueMessage('Missing required advisory recipe parameters.', 'error');
         $app->redirect(\Joomla\CMS\Uri\Uri::getInstance()->toString());
         return;
     }
-    $__advParams = array();
+    $__advParams    = array();
+    $__advBaseLoaded = false;
+    // 1. Try to load base settings from saved settings record
     if ($__advBaseId > 0) {
         try {
             $q = $db->getQuery(true)
@@ -4168,10 +4209,60 @@ if ($__mleAction === 'save_advisory_recipe') {
             $db->setQuery($q, 0, 1);
             $__advParamsJson = $db->loadResult();
             $decoded = !empty($__advParamsJson) ? json_decode($__advParamsJson, true) : null;
-            if (is_array($decoded)) { $__advParams = $decoded; }
+            if (is_array($decoded) && !empty($decoded)) {
+                $__advParams    = $decoded;
+                $__advBaseLoaded = true;
+            }
         } catch (\Throwable $e) {}
     }
-    $__advParams[$__advSettingKey] = $__advNewValue;
+    // 2. Fall back: resolve full settings from the best performance run
+    if (!$__advBaseLoaded) {
+        $__advRunId = $__advBaseRunId;
+        // If no run_id was passed, look up the best run for this lottery/method
+        if ($__advRunId <= 0) {
+            $__advMethodSources = array(
+                'skai'     => array('skai_prediction', 'skai_blend', 'skai'),
+                'ai'       => array('ai_prediction', 'ai'),
+                'mcmc'     => array('mcmc_prediction', 'mcmc'),
+                'skip_hit' => array('skip', 'skip_hit', 'skiphit'),
+                'skip'     => array('skip', 'skip_hit', 'skiphit'),
+            );
+            $__advSources    = isset($__advMethodSources[$__advMethod]) ? $__advMethodSources[$__advMethod] : array($__advMethod);
+            $__advSourceList = implode(',', array_map(function($s) use ($db) { return $db->quote($s); }, $__advSources));
+            $__advPfx        = $db->getPrefix();
+            try {
+                $db->setQuery("SELECT `run_id` FROM `" . $__advPfx . "skai_learning_performance` WHERE `user_id` = {$workspaceUserId} AND (`lottery_id` = {$__advLotteryId} OR `target_lottery_id` = {$__advLotteryId}) AND `source` IN ({$__advSourceList}) AND `avg_winning_rank` IS NOT NULL ORDER BY `weighted_quality_score` DESC, `top10_hits` DESC LIMIT 1");
+                $__advRunRow = $db->loadAssoc();
+                if (!empty($__advRunRow)) { $__advRunId = (int)$__advRunRow['run_id']; }
+            } catch (\Throwable $e) {}
+        }
+        // Resolve full settings from user_saved_numbers row
+        if ($__advRunId > 0) {
+            try {
+                $__advPfx2   = $db->getPrefix();
+                $__advSnTbl  = '`' . $__advPfx2 . 'user_saved_numbers`';
+                $db->setQuery("SELECT * FROM {$__advSnTbl} WHERE `id` = {$__advRunId} AND `user_id` = {$workspaceUserId} LIMIT 1");
+                $__advRunRow2 = $db->loadAssoc();
+                if (!empty($__advRunRow2)) {
+                    $resolved = mylottoexpertResolveEffectiveSettings($__advRunRow2);
+                    if (!empty($resolved)) {
+                        $__advParams    = $resolved;
+                        $__advBaseLoaded = true;
+                    }
+                }
+            } catch (\Throwable $e) {}
+        }
+    }
+    // 3. If settings could not be resolved, abort with a clear message
+    if (!$__advBaseLoaded || empty($__advParams)) {
+        $app->enqueueMessage('LottoExpert could not find the full base recipe, so this advisory recipe was not saved. Please save the source settings first.', 'error');
+        $app->redirect(\Joomla\CMS\Uri\Uri::getInstance()->toString());
+        return;
+    }
+    // 4. Apply only the recommended setting change (if any)
+    if (!empty($__advSettingKey)) {
+        $__advParams[$__advSettingKey] = $__advNewValue;
+    }
     $__advMethodLabel  = mleAdvisoryMethodLabel($__advMethod);
     $__advRecipeName   = $__advMethodLabel . ' Advisory Test';
     if (!empty($__advSettingLabel)) { $__advRecipeName .= ' - ' . $__advSettingLabel; }
@@ -4193,7 +4284,11 @@ if ($__mleAction === 'save_advisory_recipe') {
     try {
         $db->setQuery($insertQ);
         $db->execute();
-        $confirmMsg = 'Advisory recipe saved. LottoExpert changed only ' . $__advSettingLabel . ' from ' . $__advOldValue . ' to ' . $__advNewValue . ' based on stronger completed-run evidence. Everything else stayed the same.';
+        if (!empty($__advSettingKey)) {
+            $confirmMsg = 'Advisory recipe saved. LottoExpert changed only ' . $__advSettingLabel . ' from ' . $__advOldValue . ' to ' . $__advNewValue . ' based on stronger completed-run evidence. Everything else stayed the same.';
+        } else {
+            $confirmMsg = 'Advisory recipe saved for ' . $__advMethodLabel . '.';
+        }
         $app->enqueueMessage(htmlspecialchars($confirmMsg, ENT_QUOTES, 'UTF-8'), 'message');
     } catch (\Throwable $e) {
         error_log('[MLE Advisory] save_advisory_recipe error: ' . $e->getMessage());
@@ -10854,7 +10949,9 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
   $__advSAdv         = (array)($__advCard['settings_advice'] ?? array());
   $__advPL           = (array)($__advCard['proof_level']    ?? array());
   $__advStats        = (array)($__advCard['stats']          ?? array());
-  $__advWhatToDo     = htmlspecialchars((string)($__advCard['what_to_do']  ?? ''), ENT_QUOTES, 'UTF-8');
+  $__advDecision     = htmlspecialchars((string)($__advCard['decision']     ?? ''), ENT_QUOTES, 'UTF-8');
+  $__advWhySupport   = htmlspecialchars((string)($__advCard['why_support']  ?? ''), ENT_QUOTES, 'UTF-8');
+  $__advBaseRunId    = (int)($__advCard['base_run_id']      ?? 0);
   $__advBClean       = $__advCard['batch_cleanup']          ?? null;
   $__advPLKey        = (string)($__advPL['level']           ?? 'too_early');
   $__advPLLabel      = htmlspecialchars((string)($__advPL['label']        ?? 'Too Early'), ENT_QUOTES, 'UTF-8');
@@ -10872,7 +10969,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
   $__advKeepSame     = htmlspecialchars((string)($__advSAdv['keep_same_list']   ?? ''), ENT_QUOTES, 'UTF-8');
   $__advTopMKey      = strtolower((string)($__advTopM['method'] ?? 'skai'));
   $__advTopMLabel    = htmlspecialchars(mleAdvisoryMethodLabel($__advTopMKey), ENT_QUOTES, 'UTF-8');
-  $__advBtnLabel     = 'Save This Test Recipe';
+  $__advBtnLabel     = 'Create Advisory Recipe';
   $__advBtnClass     = 'mle-advisory-btn--primary';
   if ($__advTopMKey === 'skai' || $__advTopMKey === 'skai_prediction' || $__advTopMKey === 'skai_blend') { $__advBtnLabel = 'Create SKAI Advisory Recipe';     $__advBtnClass = 'mle-advisory-btn--skai'; }
   elseif ($__advTopMKey === 'ai'   || $__advTopMKey === 'ai_prediction')                                { $__advBtnLabel = 'Create AI Advisory Recipe';        $__advBtnClass = 'mle-advisory-btn--ai'; }
@@ -10881,27 +10978,31 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
   $__advTotalRuns     = (int)($__advStats['total_runs']      ?? 0);
   $__advTotalDraws    = (int)($__advStats['completed_draws'] ?? 0);
   $__advBasedOn       = $__advTotalRuns . ' saved run' . ($__advTotalRuns !== 1 ? 's' : '') . ' across ' . $__advTotalDraws . ' completed draw' . ($__advTotalDraws !== 1 ? 's' : '');
+  // Compute try-this-next sentence for main card rows
+  $__advTryNextMain  = '';
+  if ($__advHasAdv && $__advSLabel !== '') {
+    $__advTryNextMain = $__advTryNext !== '' ? $__advTryNext : 'Change ' . $__advSLabel . ' from ' . $__advCurrVal . ' to ' . $__advSugVal . '.';
+  }
 ?>
 <div class="mle-advisory-card" data-lottery-id="<?php echo $__advLid; ?>">
 
-  <!-- Card header: lottery name + proof badge -->
+  <!-- Card header: lottery name only - proof badge moved into rows -->
   <div class="mle-advisory-card__header">
     <h3 class="mle-advisory-card__lottery-name"><?php echo $__advLname; ?></h3>
-    <span class="mle-proof-badge <?php echo $__advPLCss; ?>" title="<?php echo $__advPLDesc; ?>"><?php echo $__advPLLabel; ?></span>
   </div>
 
-  <!-- Decision rows -->
+  <!-- Decision rows: full premium advisor brief -->
   <div class="mle-adv-rows">
-    <?php if (!empty($__advTopM)): ?>
-    <div class="mle-adv-row">
-      <span class="mle-adv-row__label">Best direction right now</span>
-      <span class="mle-adv-row__value mle-adv-row__value--primary"><?php echo $__advTopMLabel; ?></span>
+    <?php if ($__advDecision !== ''): ?>
+    <div class="mle-adv-row mle-adv-row--decision">
+      <span class="mle-adv-row__label">Decision</span>
+      <span class="mle-adv-row__value mle-adv-row__value--primary"><?php echo $__advDecision; ?></span>
     </div>
     <?php endif; ?>
-    <?php if ($__advWhatToDo !== ''): ?>
+    <?php if ($__advWhySupport !== ''): ?>
     <div class="mle-adv-row">
-      <span class="mle-adv-row__label">What to do</span>
-      <span class="mle-adv-row__value"><?php echo $__advWhatToDo; ?></span>
+      <span class="mle-adv-row__label">Why</span>
+      <span class="mle-adv-row__value"><?php echo $__advWhySupport; ?></span>
     </div>
     <?php endif; ?>
     <?php if ($__advBestRecipe !== ''): ?>
@@ -10910,9 +11011,27 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
       <span class="mle-adv-row__value"><?php echo $__advBestRecipe; ?></span>
     </div>
     <?php endif; ?>
+    <?php if ($__advTryNextMain !== ''): ?>
+    <div class="mle-adv-row">
+      <span class="mle-adv-row__label">Try this next</span>
+      <span class="mle-adv-row__value mle-adv-row__value--action"><?php echo $__advTryNextMain; ?></span>
+    </div>
+    <?php endif; ?>
+    <?php if ($__advKeepSame !== ''): ?>
+    <div class="mle-adv-row">
+      <span class="mle-adv-row__label">Keep the same</span>
+      <span class="mle-adv-row__value"><?php echo $__advKeepSame; ?></span>
+    </div>
+    <?php endif; ?>
+    <?php if ($__advHasAdv && $__advSLabel !== ''): ?>
+    <div class="mle-adv-row mle-adv-row--note">
+      <span class="mle-adv-row__label">Why this is careful</span>
+      <span class="mle-adv-row__value">Changing only one setting helps LottoExpert learn whether that setting actually helped.</span>
+    </div>
+    <?php endif; ?>
     <div class="mle-adv-row">
       <span class="mle-adv-row__label">Proof level</span>
-      <span class="mle-adv-row__value"><span class="mle-proof-badge <?php echo $__advPLCss; ?>"><?php echo $__advPLLabel; ?></span></span>
+      <span class="mle-adv-row__value"><span class="mle-proof-badge <?php echo $__advPLCss; ?>" title="<?php echo $__advPLDesc; ?>"><?php echo $__advPLLabel; ?></span></span>
     </div>
     <div class="mle-adv-row">
       <span class="mle-adv-row__label">Based on</span>
@@ -10920,14 +11039,52 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
     </div>
   </div>
 
+  <!-- Action area: one primary button + secondary buttons -->
+  <?php if (!MLE_DEMO_MODE): ?>
+  <form method="post" class="mle-advisory-actions">
+    <input type="hidden" name="mle_action"    value="save_advisory_recipe">
+    <input type="hidden" name="lottery_id"    value="<?php echo $__advLid; ?>">
+    <input type="hidden" name="method"        value="<?php echo htmlspecialchars($__advTopMKey,  ENT_QUOTES, 'UTF-8'); ?>">
+    <input type="hidden" name="setting_key"   value="<?php echo htmlspecialchars($__advSKey,     ENT_QUOTES, 'UTF-8'); ?>">
+    <input type="hidden" name="setting_label" value="<?php echo $__advSLabel; ?>">
+    <input type="hidden" name="old_value"     value="<?php echo $__advCurrVal; ?>">
+    <input type="hidden" name="new_value"     value="<?php echo $__advSugVal;  ?>">
+    <input type="hidden" name="reason"        value="<?php echo $__advWhy; ?>">
+    <input type="hidden" name="proof_label"   value="<?php echo $__advPLLabel; ?>">
+    <input type="hidden" name="base_run_id"   value="<?php echo $__advBaseRunId; ?>">
+    <?php echo \Joomla\CMS\HTML\HTMLHelper::_('form.token'); ?>
+    <button type="submit" class="mle-advisory-btn <?php echo $__advBtnClass; ?>"><?php echo htmlspecialchars($__advBtnLabel, ENT_QUOTES, 'UTF-8'); ?></button>
+    <?php if ($__advHasAdv && $__advSLabel !== ''): ?>
+    <button type="button" class="mle-advisory-btn mle-advisory-btn--secondary mle-adv-settings-toggle" data-lid="<?php echo $__advLid; ?>">Try These Settings Next</button>
+    <?php endif; ?>
+    <button type="button" class="mle-advisory-btn mle-advisory-btn--secondary mle-adv-proof-toggle" data-lid="<?php echo $__advLid; ?>">Show Proof History</button>
+  </form>
+  <?php else: ?>
+  <div class="mle-advisory-actions">
+    <button type="button" class="mle-advisory-btn mle-advisory-btn--secondary mle-adv-proof-toggle" data-lid="<?php echo $__advLid; ?>">Show Proof History</button>
+  </div>
+  <?php endif; ?>
+
+  <!-- Settings detail: shown when "Try These Settings Next" is clicked -->
+  <?php if ($__advHasAdv && $__advSLabel !== '' && $__advWhy !== ''): ?>
+  <div class="mle-adv-settings-detail" id="mle-adv-settings-<?php echo $__advLid; ?>" style="display:none;margin-top:.5rem">
+    <div class="mle-adv-rows">
+      <div class="mle-adv-row">
+        <span class="mle-adv-row__label">Why this change</span>
+        <span class="mle-adv-row__value"><?php echo $__advWhy; ?></span>
+      </div>
+    </div>
+  </div>
+  <?php endif; ?>
+
   <!-- Method comparison: Beginner view (plain opinion) -->
   <?php if (!empty($__advOpinions)): ?>
-  <div class="mle-adv-method-block">
+  <div class="mle-adv-method-block" style="margin-top:.75rem">
     <table class="mle-adv-opinion-table mle-nonadvanced-only" aria-label="Analysis comparison">
       <thead>
         <tr>
           <th class="mle-adv-opinion-table__col-method">Analysis</th>
-          <th class="mle-adv-opinion-table__col-opinion">What LottoExpert thinks</th>
+          <th class="mle-adv-opinion-table__col-opinion">LottoExpert read</th>
         </tr>
       </thead>
       <tbody>
@@ -10965,77 +11122,11 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
   </div>
   <?php endif; ?>
 
-  <!-- Settings Advisor: "What setting should I try next?" -->
-  <?php if ($__advHasAdv && $__advSLabel !== ''): ?>
-  <div class="mle-adv-settings-block">
-    <div class="mle-adv-settings-block__heading">What setting should I try next?</div>
-    <div class="mle-adv-rows">
-      <div class="mle-adv-row">
-        <span class="mle-adv-row__label">Try this next</span>
-        <span class="mle-adv-row__value mle-adv-row__value--action"><?php echo $__advTryNext !== '' ? $__advTryNext : 'Change ' . $__advSLabel . ' from ' . $__advCurrVal . ' to ' . $__advSugVal . '.'; ?></span>
-      </div>
-      <?php if ($__advWhy !== ''): ?>
-      <div class="mle-adv-row">
-        <span class="mle-adv-row__label">Why</span>
-        <span class="mle-adv-row__value"><?php echo $__advWhy; ?></span>
-      </div>
-      <?php endif; ?>
-      <?php if ($__advKeepSame !== ''): ?>
-      <div class="mle-adv-row">
-        <span class="mle-adv-row__label">Keep the same</span>
-        <span class="mle-adv-row__value"><?php echo $__advKeepSame; ?></span>
-      </div>
-      <?php endif; ?>
-    </div>
-    <p class="mle-adv-one-change-note">Changing only one setting helps LottoExpert learn whether that setting actually helped.</p>
-    <?php if (!MLE_DEMO_MODE): ?>
-    <form method="post" class="mle-advisory-actions">
-      <input type="hidden" name="mle_action"    value="save_advisory_recipe">
-      <input type="hidden" name="lottery_id"    value="<?php echo $__advLid; ?>">
-      <input type="hidden" name="method"        value="<?php echo htmlspecialchars($__advTopMKey,  ENT_QUOTES, 'UTF-8'); ?>">
-      <input type="hidden" name="setting_key"   value="<?php echo htmlspecialchars($__advSKey,     ENT_QUOTES, 'UTF-8'); ?>">
-      <input type="hidden" name="setting_label" value="<?php echo $__advSLabel; ?>">
-      <input type="hidden" name="old_value"     value="<?php echo $__advCurrVal; ?>">
-      <input type="hidden" name="new_value"     value="<?php echo $__advSugVal;  ?>">
-      <input type="hidden" name="reason"        value="<?php echo $__advWhy; ?>">
-      <input type="hidden" name="proof_label"   value="<?php echo $__advPLLabel; ?>">
-      <?php echo \Joomla\CMS\HTML\HTMLHelper::_('form.token'); ?>
-      <button type="submit" class="mle-advisory-btn <?php echo $__advBtnClass; ?>"><?php echo htmlspecialchars($__advBtnLabel, ENT_QUOTES, 'UTF-8'); ?></button>
-      <button type="button" class="mle-advisory-btn mle-advisory-btn--secondary mle-adv-proof-toggle" data-lid="<?php echo $__advLid; ?>">Show Proof History</button>
-    </form>
-    <?php else: ?>
-    <div class="mle-advisory-actions">
-      <button type="button" class="mle-advisory-btn mle-advisory-btn--secondary mle-adv-proof-toggle" data-lid="<?php echo $__advLid; ?>">Show Proof History</button>
-    </div>
-    <?php endif; ?>
-  </div>
-  <?php else: ?>
-  <!-- No settings advice: still show primary action and proof toggle -->
-  <div class="mle-advisory-actions" style="margin-top:.75rem">
-    <?php if (!MLE_DEMO_MODE): ?>
-    <form method="post" style="display:inline">
-      <input type="hidden" name="mle_action"    value="save_advisory_recipe">
-      <input type="hidden" name="lottery_id"    value="<?php echo $__advLid; ?>">
-      <input type="hidden" name="method"        value="<?php echo htmlspecialchars($__advTopMKey, ENT_QUOTES, 'UTF-8'); ?>">
-      <input type="hidden" name="setting_key"   value="">
-      <input type="hidden" name="setting_label" value="">
-      <input type="hidden" name="old_value"     value="">
-      <input type="hidden" name="new_value"     value="">
-      <input type="hidden" name="reason"        value="">
-      <input type="hidden" name="proof_label"   value="<?php echo $__advPLLabel; ?>">
-      <?php echo \Joomla\CMS\HTML\HTMLHelper::_('form.token'); ?>
-      <button type="submit" class="mle-advisory-btn <?php echo $__advBtnClass; ?>"><?php echo htmlspecialchars($__advBtnLabel, ENT_QUOTES, 'UTF-8'); ?></button>
-    </form>
-    <?php endif; ?>
-    <button type="button" class="mle-advisory-btn mle-advisory-btn--secondary mle-adv-proof-toggle" data-lid="<?php echo $__advLid; ?>">Show Proof History</button>
-  </div>
-  <?php endif; ?>
-
-  <!-- Proof History: collapsed by default, collapsible in beginner mode -->
+  <!-- Proof History: collapsed by default -->
   <details class="mle-adv-proof-history" id="mle-adv-proof-<?php echo $__advLid; ?>" style="margin-top:.75rem">
     <summary class="mle-adv-proof-history__summary">Proof History (<?php echo $__advTotalDraws; ?> completed draws, <?php echo $__advTotalRuns; ?> runs)</summary>
     <div class="mle-adv-proof-history__body">
-      <p style="font-size:.8rem;color:#64748b;margin:0 0 .5rem">Draw-by-draw results are listed here for reference. These numbers do not change your advice. They are the evidence behind it.</p>
+      <p style="font-size:.8rem;color:#64748b;margin:0 0 .5rem">Draw-by-draw results are listed here for reference only. These numbers do not change your advice. They are the evidence behind it.</p>
       <table class="mle-adv-proof-table" aria-label="Proof history for <?php echo $__advLname; ?>">
         <thead>
           <tr>
@@ -11064,7 +11155,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
     </div>
   </details>
 
-  <!-- Batch Cleanup -->
+  <!-- Keep the Best Evidence (batch cleanup) -->
   <?php if (!empty($__advBClean)):
     $__advClTotal  = (int)($__advBClean['total_runs'] ?? 0);
     $__advClDate   = htmlspecialchars((string)($__advBClean['draw_date'] ?? ''), ENT_QUOTES, 'UTF-8');
@@ -11072,24 +11163,24 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
     $__advClReview = (array)($__advBClean['review']  ?? array());
     $__advClArch   = (array)($__advBClean['archive'] ?? array());
   ?>
-  <div class="mle-batch-cleanup">
-    <div class="mle-batch-cleanup__title">Run Cleanup - <?php echo $__advClTotal; ?> runs on <?php echo $__advClDate; ?></div>
-    <p class="mle-batch-cleanup__body">You have several runs for this draw date. Retire the weaker ones to keep your advice accurate.</p>
+  <div class="mle-batch-cleanup" style="margin-top:.75rem">
+    <div class="mle-batch-cleanup__title">Keep the Best Evidence</div>
+    <p class="mle-batch-cleanup__body">You ran several predictions for this draw. LottoExpert found the runs that teach us the most. Keeping the strongest evidence helps future advice stay clean.</p>
     <div class="mle-batch-cleanup__groups">
       <div class="mle-batch-cleanup__group mle-batch-cleanup__group--keep">
-        <div class="mle-batch-cleanup__group-label">Use in advice (<?php echo count($__advClKeep); ?>)</div>
+        <div class="mle-batch-cleanup__group-label">Keep (<?php echo count($__advClKeep); ?>)</div>
         <?php foreach ($__advClKeep as $__advR): ?>
         <div class="mle-batch-cleanup__run"><?php echo htmlspecialchars(mleAdvisoryMethodLabel($__advR['source'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></div>
         <?php endforeach; ?>
       </div>
       <div class="mle-batch-cleanup__group mle-batch-cleanup__group--review">
-        <div class="mle-batch-cleanup__group-label">Watch (<?php echo count($__advClReview); ?>)</div>
+        <div class="mle-batch-cleanup__group-label">Review first (<?php echo count($__advClReview); ?>)</div>
         <?php foreach ($__advClReview as $__advR): ?>
         <div class="mle-batch-cleanup__run"><?php echo htmlspecialchars(mleAdvisoryMethodLabel($__advR['source'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></div>
         <?php endforeach; ?>
       </div>
       <div class="mle-batch-cleanup__group mle-batch-cleanup__group--archive">
-        <div class="mle-batch-cleanup__group-label">Retire from advice (<?php echo count($__advClArch); ?>)</div>
+        <div class="mle-batch-cleanup__group-label">Retire (<?php echo count($__advClArch); ?>)</div>
         <div class="mle-batch-cleanup__run"><?php echo count($__advClArch); ?> run(s) recommended to retire</div>
       </div>
     </div>
@@ -11101,8 +11192,9 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
       <?php foreach ($__advClKeep as $__advR): ?><input type="hidden" name="keep_ids[]"    value="<?php echo (int)($__advR['id'] ?? 0); ?>"><?php endforeach; ?>
       <?php foreach ($__advClArch as $__advR): ?><input type="hidden" name="archive_ids[]" value="<?php echo (int)($__advR['id'] ?? 0); ?>"><?php endforeach; ?>
       <?php echo \Joomla\CMS\HTML\HTMLHelper::_('form.token'); ?>
-      <button type="submit" class="mle-advisory-btn mle-advisory-btn--primary">Keep Best Runs</button>
-      <button type="submit" name="archive_only" value="1" class="mle-advisory-btn mle-advisory-btn--secondary">Retire from Advice</button>
+      <button type="submit" class="mle-advisory-btn mle-advisory-btn--primary">Keep Recommended</button>
+      <button type="submit" name="archive_only" value="1" class="mle-advisory-btn mle-advisory-btn--secondary">Retire Weak Runs</button>
+      <button type="button" class="mle-advisory-btn mle-advisory-btn--ghost" onclick="this.closest('.mle-batch-cleanup').style.display='none'">Leave As Is</button>
     </form>
     <?php endif; ?>
   </div>
@@ -11113,6 +11205,31 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
 <?php endif; ?>
 </div>
 <!-- /advisory-board -->
+
+<script>
+(function() {
+  function mleAdvToggleProof(btn) {
+    var lid = btn.getAttribute('data-lid');
+    var det = document.getElementById('mle-adv-proof-' + lid);
+    if (!det) { return; }
+    if (det.open) { det.removeAttribute('open'); btn.textContent = 'Show Proof History'; }
+    else { det.setAttribute('open', ''); btn.textContent = 'Hide Proof History'; }
+  }
+  function mleAdvToggleSettings(btn) {
+    var lid = btn.getAttribute('data-lid');
+    var det = document.getElementById('mle-adv-settings-' + lid);
+    if (!det) { return; }
+    var hidden = det.style.display === 'none' || det.style.display === '';
+    det.style.display = hidden ? 'block' : 'none';
+    btn.textContent = hidden ? 'Hide Settings Detail' : 'Try These Settings Next';
+  }
+  document.addEventListener('click', function(e) {
+    var t = e.target;
+    if (t && t.classList && t.classList.contains('mle-adv-proof-toggle')) { mleAdvToggleProof(t); }
+    if (t && t.classList && t.classList.contains('mle-adv-settings-toggle')) { mleAdvToggleSettings(t); }
+  });
+}());
+</script>
 
 <!-- -- Start Here: How to use this workspace (demoted) ------------------ -->
 <div class="mle-start-here" role="region" aria-label="How to use this workspace" style="margin-top:1.5rem">
@@ -11353,14 +11470,14 @@ $__mleModeHelperText = array(
 <!-- Quick-jump navigation -->
 <nav class="mle-quick-nav" aria-label="Jump to section">
   <span class="mle-quick-nav__label">Jump to:</span>
-  <a href="#info-card">&#x1F4CB; Overview</a>
-  <a href="#skai-global-snapshot" class="mle-quick-nav__advanced">&#x1F4CA; Snapshot</a>
-  <a href="#mle-historical-validation-wrap">&#x1F3C6; Draw Results</a>
-  <a href="#saved-predictions" class="mle-quick-nav__advanced">&#x1F4CC; Saved Predictions</a>
-  <a href="#my-lotteries">&#x1F3B2; My Lotteries</a>
-  <a href="#numbers-to-play">&#x1F3AF; Numbers to Play</a>
-  <a href="#favorite-lotteries">&#x2B50; Favorite Lotteries</a>
-  <a href="#favorite-wheeling-systems">&#x1F3A1; Wheeling Systems</a>
+  <a href="#info-card">Overview</a>
+  <a href="#skai-global-snapshot" class="mle-quick-nav__advanced">Snapshot</a>
+  <a href="#mle-historical-validation-wrap">Draw Results</a>
+  <a href="#saved-predictions" class="mle-quick-nav__advanced">Saved Predictions</a>
+  <a href="#my-lotteries">My Lotteries</a>
+  <a href="#numbers-to-play">Numbers to Play</a>
+  <a href="#favorite-lotteries">Favorite Lotteries</a>
+  <a href="#favorite-wheeling-systems">Wheeling Systems</a>
 </nav>
 
 <div id="info-card" class="skai-card mle-onboard-card open">
@@ -11388,7 +11505,7 @@ $__mleModeHelperText = array(
         </div>
 
         <div class="mle-onboard-hero__right">
-          <button id="info-toggle" type="button" class="mle-onboard-toggle" aria-expanded="true" aria-label="Collapse onboarding panel">&#x25BA; Expand</button>
+          <button id="info-toggle" type="button" class="mle-onboard-toggle" aria-expanded="true" aria-label="Collapse onboarding panel"> Expand</button>
 
           <div class="mle-onboard-hero__mini">
             <span class="mle-onboard-hero__mini-label">Current workspace status</span>
@@ -11548,12 +11665,12 @@ $__mleModeHelperText = array(
 <div class="mle-section-jump" aria-label="Overview quick navigation">
   <span class="mle-section-jump__label">Jump to</span>
   <div class="mle-section-jump__links">
-    <a href="#info-card">&#x1F4CB; Overview</a>
-    <a href="#mle-historical-validation-wrap">&#x1F3C6; Draw Results</a>
-    <a href="#my-lotteries">&#x1F3B2; My Lotteries</a>
-    <a href="#numbers-to-play">&#x1F3AF; Numbers to Play</a>
-    <a href="#favorite-lotteries">&#x2B50; Favorite Lotteries</a>
-    <a href="#favorite-wheeling-systems">&#x1F3A1; Wheeling Systems</a>
+    <a href="#info-card">Overview</a>
+    <a href="#mle-historical-validation-wrap">Draw Results</a>
+    <a href="#my-lotteries">My Lotteries</a>
+    <a href="#numbers-to-play">Numbers to Play</a>
+    <a href="#favorite-lotteries">Favorite Lotteries</a>
+    <a href="#favorite-wheeling-systems">Wheeling Systems</a>
   </div>
 </div>
 
@@ -15350,17 +15467,17 @@ usort($__intelligenceCards, function ($a, $b) {
       <h2 class="mle-decision-summary__title">Lottery Decision Workspace</h2>
       <p class="mle-decision-summary__subtitle">Each lottery opens into one guided workspace so the recommendation, proof, supporting runs, and recent validation stay together instead of being scattered across the page.</p>
     </div>
-    <button type="button" class="prc-toggle-btn" id="mle-ci-toggle-all" aria-expanded="true">&#x25BC; Collapse all</button>
+    <button type="button" class="prc-toggle-btn" id="mle-ci-toggle-all" aria-expanded="true">Collapse all</button>
   </div>
   <div class="mle-section-jump" aria-label="Decision Workspace quick navigation" style="margin:0 0 1rem;">
     <span class="mle-section-jump__label">Jump to</span>
     <div class="mle-section-jump__links">
-      <a href="#info-card">&#x1F4CB; Overview</a>
-      <a href="#mle-historical-validation-wrap">&#x1F3C6; Draw Results</a>
-      <a href="#my-lotteries">&#x1F3B2; My Lotteries</a>
-      <a href="#numbers-to-play">&#x1F3AF; Numbers to Play</a>
-      <a href="#favorite-lotteries">&#x2B50; Favorite Lotteries</a>
-      <a href="#favorite-wheeling-systems">&#x1F3A1; Wheeling Systems</a>
+      <a href="#info-card">Overview</a>
+      <a href="#mle-historical-validation-wrap">Draw Results</a>
+      <a href="#my-lotteries">My Lotteries</a>
+      <a href="#numbers-to-play">Numbers to Play</a>
+      <a href="#favorite-lotteries">Favorite Lotteries</a>
+      <a href="#favorite-wheeling-systems">Wheeling Systems</a>
     </div>
   </div>
   <div style="margin:0 0 1rem 0; padding:0.85rem 1rem; border:1px solid #dbe4f0; border-radius:12px; background:linear-gradient(180deg,#f8fbff 0%,#ffffff 100%);">
@@ -15429,7 +15546,7 @@ usort($__intelligenceCards, function ($a, $b) {
             <span class="<?php echo htmlspecialchars((string)$__intCard['evidence_stage_class'], ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars((string)$__intCard['evidence_stage'], ENT_QUOTES, 'UTF-8'); ?></span>
             <span class="<?php echo htmlspecialchars((string)$__intCard['signal_strength_class'], ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars((string)$__intCard['signal_strength'], ENT_QUOTES, 'UTF-8'); ?></span>
           </div>
-          <button type="button" class="prc-toggle-btn" data-ci-id="<?php echo $__ciSectionId; ?>" data-ci-toggle-btn="1">&#x25BC; Expand</button>
+          <button type="button" class="prc-toggle-btn" data-ci-id="<?php echo $__ciSectionId; ?>" data-ci-toggle-btn="1">Expand</button>
         </div>
         <div class="mle-ci-body" id="<?php echo $__ciSectionId; ?>-body" style="display:none;">
           <div class="mle-ci-decision-shell">
@@ -15709,7 +15826,7 @@ foreach ($bestOpps as $__sopp) {
       id="mle-advanced-toggle-btn"
       aria-expanded="false"
       aria-controls="mle-advanced-toggle-panel">
-      <span aria-hidden="true">&#9881;</span>
+      
       <span class="mle-advanced-toggle-btn-text--closed">Show Advanced Analysis</span>
       <span class="mle-advanced-toggle-btn-text--open">Hide Advanced Analysis</span>
     </button>
@@ -15718,12 +15835,12 @@ foreach ($bestOpps as $__sopp) {
   <div class="mle-section-jump" aria-label="Advanced Analysis quick navigation" style="margin:0 1rem 1rem;">
     <span class="mle-section-jump__label">Jump to</span>
     <div class="mle-section-jump__links">
-      <a href="#info-card">&#x1F4CB; Overview</a>
-      <a href="#mle-historical-validation-wrap">&#x1F3C6; Draw Results</a>
-      <a href="#my-lotteries">&#x1F3B2; My Lotteries</a>
-      <a href="#numbers-to-play">&#x1F3AF; Numbers to Play</a>
-      <a href="#favorite-lotteries">&#x2B50; Favorite Lotteries</a>
-      <a href="#favorite-wheeling-systems">&#x1F3A1; Wheeling Systems</a>
+      <a href="#info-card">Overview</a>
+      <a href="#mle-historical-validation-wrap">Draw Results</a>
+      <a href="#my-lotteries">My Lotteries</a>
+      <a href="#numbers-to-play">Numbers to Play</a>
+      <a href="#favorite-lotteries">Favorite Lotteries</a>
+      <a href="#favorite-wheeling-systems">Wheeling Systems</a>
     </div>
   </div>
 
@@ -15793,7 +15910,7 @@ foreach ($bestOpps as $__sopp) {
       <?php if ($__snapLastDate !== '' || $__snapRunMode !== ''): ?>
         <div class="skai-bss-card__footer-row">
           <?php if ($__snapLastDate !== ''): ?>
-            <span class="skai-bss-card__date skai-bss-card__date--highlight">&#128197; <?php echo $__snapLastDate; ?></span>
+            <span class="skai-bss-card__date skai-bss-card__date--highlight"><?php echo $__snapLastDate; ?></span>
           <?php endif; ?>
           <?php if ($__snapRunMode !== ''): ?>
             <span class="skai-bss-card__mode-badge"><?php echo $__snapRunMode; ?></span>
@@ -15833,7 +15950,7 @@ foreach ($bestOpps as $__sopp) {
     </div>
     <div class="prc-legend" role="note" aria-label="Row highlight legend">
       <span class="prc-legend-title">Row highlight:</span>
-      <span class="prc-legend-swatch prc-legend-best">&#x1F3C6; Overall best - highest total hits, then strongest ticket coverage, then strongest combo quality, then earliest ranked matches</span>
+      <span class="prc-legend-swatch prc-legend-best">Overall best - highest total hits, then strongest ticket coverage, then strongest combo quality, then earliest ranked matches</span>
     </div>
   </div>
 
@@ -15842,7 +15959,7 @@ foreach ($bestOpps as $__sopp) {
       Print all draw results
     </button>
     <button type="button" class="btn-secondary" style="padding:0.4rem 0.85rem;font-size:0.82rem;white-space:nowrap;" id="mle-prc-toggle-all-btn" aria-expanded="true">
-      &#x25BC; Collapse All
+      Collapse All
     </button>
     <span class="mle-section-actions__hint">
       Close or reopen every draw-results table in one click.
@@ -15852,12 +15969,12 @@ foreach ($bestOpps as $__sopp) {
   <div class="mle-section-jump" aria-label="Draw Results quick navigation">
     <span class="mle-section-jump__label">Jump to</span>
     <div class="mle-section-jump__links">
-      <a href="#info-card">&#x1F4CB; Overview</a>
-      <a href="#mle-historical-validation-wrap">&#x1F3C6; Draw Results</a>
-      <a href="#my-lotteries">&#x1F3B2; My Lotteries</a>
-      <a href="#numbers-to-play">&#x1F3AF; Numbers to Play</a>
-      <a href="#favorite-lotteries">&#x2B50; Favorite Lotteries</a>
-      <a href="#favorite-wheeling-systems">&#x1F3A1; Wheeling Systems</a>
+      <a href="#info-card">Overview</a>
+      <a href="#mle-historical-validation-wrap">Draw Results</a>
+      <a href="#my-lotteries">My Lotteries</a>
+      <a href="#numbers-to-play">Numbers to Play</a>
+      <a href="#favorite-lotteries">Favorite Lotteries</a>
+      <a href="#favorite-wheeling-systems">Wheeling Systems</a>
     </div>
   </div>
 
@@ -15897,7 +16014,7 @@ foreach ($bestOpps as $__sopp) {
         <span class="prc-badge"><?php echo $__prcScored; ?> scored</span>
         <span class="prc-badge"><?php echo $__prcPending; ?> pending</span>
         <?php if ($__prcMaxHits > 0): ?>
-          <span class="prc-badge prc-badge-best">&#x1F3C6; Best: <?php echo $__prcMaxHits; ?> hits</span>
+          <span class="prc-badge prc-badge-best">Best: <?php echo $__prcMaxHits; ?> hits</span>
         <?php endif; ?>
       </div>
       <div style="display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;gap:8px;">
@@ -15905,7 +16022,7 @@ foreach ($bestOpps as $__sopp) {
           <a href="<?php echo htmlspecialchars($__prcOfficialUrl, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener" class="btn-secondary" style="padding:0.35rem 0.75rem;font-size:0.78rem;white-space:nowrap;">Official Results</a>
         <?php endif; ?>
         <button type="button" class="btn-secondary" style="padding:0.35rem 0.75rem;font-size:0.78rem;white-space:nowrap;" data-prc-print-lottery="1">Print This Lottery Result Table</button>
-        <button type="button" class="prc-toggle-btn" data-prc-id="<?php echo $__prcSectionId; ?>" data-prc-toggle-btn="1">&#x25BC; Collapse</button>
+        <button type="button" class="prc-toggle-btn" data-prc-id="<?php echo $__prcSectionId; ?>" data-prc-toggle-btn="1">Collapse</button>
       </div>
     </div>
 
@@ -15972,7 +16089,7 @@ foreach ($bestOpps as $__sopp) {
               <input type="checkbox" name="prc_del_<?php echo $__prcSectionId; ?>" value="<?php echo (int)$__pr['run_id']; ?>" id="pdel-<?php echo (int)$__pr['run_id']; ?>" aria-label="Select prediction #<?php echo $__prcRowNum; ?> for deletion">
             </td>
             <td style="color:#94a3b8;font-size:0.75rem;">
-              <?php if ($__prIsBest): ?><span class="prc-trophy">&#x1F3C6;</span><?php endif; ?>
+              <?php if ($__prIsBest): ?><span class="prc-trophy"></span><?php endif; ?>
               <?php echo $__prcRowNum; ?>
             </td>
             <td style="white-space:nowrap;"><?php echo $__prDateStr; ?></td>
@@ -16090,7 +16207,7 @@ foreach ($bestOpps as $__sopp) {
                   <?php foreach ($__pr['actual_extra'] as $__exn):
                     $__exHit = !empty($__predExtraAllLookup) && isset($__predExtraAllLookup[(int)$__exn]); ?>
                   <span class="prc-num <?php echo $__exHit ? 'prc-num-extra' : 'prc-num-extra-miss'; ?>"><?php echo (int)$__exn; ?></span>
-                  <?php if ($__exHit): ?><span class="prc-extra"> &#x2713;</span><?php endif; ?>
+                  <?php if ($__exHit): ?><span class="prc-extra"> (hit)</span><?php endif; ?>
                   <?php endforeach; ?>
                 <?php else: ?>
                   <span class="prc-hits-zero"> - </span>
@@ -16117,7 +16234,7 @@ foreach ($bestOpps as $__sopp) {
       <form method="post" class="prc-delete-bar" data-prc-delete-form="1" data-prc-section-id="<?php echo $__prcSectionId; ?>">
         <?php echo \Joomla\CMS\HTML\HTMLHelper::_('form.token'); ?>
         <input type="hidden" name="delete_set_selected" id="prc-del-val-<?php echo $__prcSectionId; ?>" value="">
-        <button type="submit" class="btn-danger" style="font-size:0.8rem; padding:0.3rem 0.9rem;">&#x1F5D1; Delete Selected</button>
+        <button type="submit" class="btn-danger" style="font-size:0.8rem; padding:0.3rem 0.9rem;">Delete Selected</button>
         <button type="button" class="btn-secondary" style="font-size:0.8rem; padding:0.3rem 0.9rem;" data-prc-select-upcoming-btn="1" data-prc-section-id="<?php echo $__prcSectionId; ?>" aria-label="Select all upcoming predictions that have not yet been scored">Select Upcoming</button>
         <button type="button" class="btn-secondary" style="font-size:0.8rem; padding:0.3rem 0.9rem;" data-prc-clear-btn="1" data-prc-section-id="<?php echo $__prcSectionId; ?>">Clear selection</button>
         <span class="prc-del-hint">Tick one or more checkboxes, then click "Delete Selected" to remove them. Change your mind? Click "Clear Selection".</span>
@@ -16193,12 +16310,12 @@ foreach ($bestOpps as $__sopp) {
   <div class="mle-section-jump" aria-label="Saved Predictions quick navigation">
     <span class="mle-section-jump__label">Jump to</span>
     <div class="mle-section-jump__links">
-      <a href="#info-card">&#x1F4CB; Overview</a>
-      <a href="#mle-historical-validation-wrap">&#x1F3C6; Draw Results</a>
-      <a href="#my-lotteries">&#x1F3B2; My Lotteries</a>
-      <a href="#numbers-to-play">&#x1F3AF; Numbers to Play</a>
-      <a href="#favorite-lotteries">&#x2B50; Favorite Lotteries</a>
-      <a href="#favorite-wheeling-systems">&#x1F3A1; Wheeling Systems</a>
+      <a href="#info-card">Overview</a>
+      <a href="#mle-historical-validation-wrap">Draw Results</a>
+      <a href="#my-lotteries">My Lotteries</a>
+      <a href="#numbers-to-play">Numbers to Play</a>
+      <a href="#favorite-lotteries">Favorite Lotteries</a>
+      <a href="#favorite-wheeling-systems">Wheeling Systems</a>
     </div>
   </div>
   <div class="mle-sp-mode-note">
@@ -16249,7 +16366,7 @@ foreach ($bestOpps as $__sopp) {
     id="mle-lottery-toggle-all-btn"
     data-lottery-toggle-all-btn="1"
     aria-expanded="true">
-    &#x25BC; Collapse All
+    Collapse All
   </button>
   <span class="mle-section-actions__hint">
     Close or reopen every saved-prediction draw card with one click.
@@ -16350,12 +16467,12 @@ unset($__lotRef);
 <div class="mle-section-jump" aria-label="My Lotteries quick navigation">
   <span class="mle-section-jump__label">Jump to</span>
   <div class="mle-section-jump__links">
-    <a href="#info-card">&#x1F4CB; Overview</a>
-    <a href="#mle-historical-validation-wrap">&#x1F3C6; Draw Results</a>
-    <a href="#my-lotteries">&#x1F3B2; My Lotteries</a>
-    <a href="#numbers-to-play">&#x1F3AF; Numbers to Play</a>
-    <a href="#favorite-lotteries">&#x2B50; Favorite Lotteries</a>
-    <a href="#favorite-wheeling-systems">&#x1F3A1; Wheeling Systems</a>
+    <a href="#info-card">Overview</a>
+    <a href="#mle-historical-validation-wrap">Draw Results</a>
+    <a href="#my-lotteries">My Lotteries</a>
+    <a href="#numbers-to-play">Numbers to Play</a>
+    <a href="#favorite-lotteries">Favorite Lotteries</a>
+    <a href="#favorite-wheeling-systems">Wheeling Systems</a>
   </div>
 </div>
 <?php foreach ($__lotteryOrder as $__outerLid):
@@ -16392,7 +16509,7 @@ unset($__lotRef);
     <button type="button" class="mle-lottery-outer-toggle"
             data-outer-lottery-toggle-btn="<?php echo $__outerLid; ?>"
             aria-label="Collapse <?php echo htmlspecialchars((string)$__outerLot['lottery_name'], ENT_QUOTES); ?>">
-      &#x25BC; Collapse
+      Collapse
     </button>
   </div>
   <div class="mle-lottery-outer-body">
@@ -16474,7 +16591,7 @@ unset($__lotRef);
                  aria-expanded="true"
                  aria-label="Collapse lottery section"
                  data-lottery-toggle-btn="1">
-          &#x25BC; Collapse
+          Collapse
         </button>
 
         <?php if ($__mleWorkspaceMode !== 'beginner'): ?><button type="button" class="mle-print-header-btn btn-secondary"
@@ -16498,7 +16615,7 @@ unset($__lotRef);
                    class="sdi-delete-btn"
                    aria-label="Delete all predictions for this draw"
                    title="Delete all predictions for this draw">
-            <span aria-hidden="true">&#x1F5D1;&#xFE0E;</span> Delete
+            Delete
           </button>
         </form><?php endif; ?>
       </div>
@@ -17203,11 +17320,11 @@ $methodKeys = ['skip_hit','ai_prediction','mcmc_prediction','skai_prediction','h
           <div class="sw-intel-card" data-sw-card="confidence">
             <div class="sw-intel-card-title">Strategy confidence</div>
             <div class="sw-intel-meter" aria-label="Agreement strength meter">
-              <span class="sw-dot" data-sw-dot="1">&#9679;</span>
-              <span class="sw-dot" data-sw-dot="2">&#9679;</span>
-              <span class="sw-dot" data-sw-dot="3">&#9679;</span>
-              <span class="sw-dot" data-sw-dot="4">&#9679;</span>
-              <span class="sw-dot" data-sw-dot="5">&#9679;</span>
+              <span class="sw-dot" data-sw-dot="1">.</span>
+              <span class="sw-dot" data-sw-dot="2">.</span>
+              <span class="sw-dot" data-sw-dot="3">.</span>
+              <span class="sw-dot" data-sw-dot="4">.</span>
+              <span class="sw-dot" data-sw-dot="5">.</span>
             </div>
             <div class="sw-intel-label" data-sw-conf-label> - </div>
             <div class="sw-intel-detail" data-sw-conf-detail>Add numbers to see how strong the agreement is.</div>
@@ -17220,7 +17337,7 @@ $methodKeys = ['skip_hit','ai_prediction','mcmc_prediction','skai_prediction','h
               <?php foreach ($modules as $__swCM): ?>
               <li class="sw-coverage-item"
                   data-sw-cov-method="<?php echo htmlspecialchars($__swCM['key'], ENT_QUOTES); ?>">
-                <span class="sw-coverage-check" aria-hidden="true">&#x2717;</span>
+                <span class="sw-coverage-check" aria-hidden="true">x</span>
                 <span class="sw-coverage-name"><?php echo htmlspecialchars($__swCM['label'], ENT_QUOTES); ?></span>
               </li>
               <?php endforeach; ?>
@@ -18474,7 +18591,7 @@ $methodKeys = ['skip_hit','ai_prediction','mcmc_prediction','skai_prediction','h
     Each row is one method. Each column is a rank position, where number 1 is the top pick. A darker cell means that rank produced more hits.
   </p>
   <details class="sdi-hm-accordion">
-    <summary>&#x2139; Full guide</summary>
+    <summary>Full guide</summary>
     <div class="sdi-hm-detail">
       <strong>Left:</strong> earlier picks. <strong>Right:</strong> later picks.
       Gold outline = sweet-spot ranks. Goal: hits in #1-#5 beats late-rank accidents.
@@ -19124,11 +19241,11 @@ $__lpLiveTuneLabel = skaiLpCurrentHybridStatus(
 
 // -- Display helpers -------------------------------------------------------
 $__lpFmtNum = function($v, $decimals = 1) {
-    if ($v === null || $v === '') { return '<span style="color:#cbd5e1;">&#8212;</span>'; }
+    if ($v === null || $v === '') { return '<span style="color:#cbd5e1;">--</span>'; }
     return htmlspecialchars((string)round((float)$v, $decimals), ENT_QUOTES);
 };
 $__lpFmtRankColor = function($v) {
-    if ($v === null || $v === '') { return '<span style="color:#cbd5e1;">&#8212;</span>'; }
+    if ($v === null || $v === '') { return '<span style="color:#cbd5e1;">--</span>'; }
     $f = round((float)$v, 1);
     if ($f <= 5)  { $c = '#b45309'; }
     elseif ($f <= 10) { $c = '#059669'; }
@@ -19144,7 +19261,7 @@ $__lpFmtRankColor = function($v) {
   <!-- Header + overall status badge -->
   <div class="skai-lp-header">
     <div class="skai-lp-header-left">
-      <h3 class="skai-lp-title">&#x1F4CA; Ranking Performance</h3>
+      <h3 class="skai-lp-title">Ranking Performance</h3>
       <p class="skai-lp-subtitle">
         Tracks how well your saved predictions ranked the actual winning numbers. Lower average rank means the drawn numbers appeared higher in your prediction list.
       </p>
@@ -19157,7 +19274,7 @@ $__lpFmtRankColor = function($v) {
   <?php if (empty($__lpGroupHistory)): ?>
   <!-- -- Empty state ----------------------------------------------------- -->
   <div class="skai-lp-empty">
-    <span class="skai-lp-empty-icon">&#x1F52D;</span>
+    <span class="skai-lp-empty-icon">--</span>
     <strong>No results scored yet</strong><br>
     Performance data is recorded automatically once an actual draw result is available
     for one of your saved prediction runs. Check back after the next draw is completed.
@@ -19187,7 +19304,7 @@ $__lpFmtRankColor = function($v) {
     <span class="skai-lp-cons-desc">
       <?php echo htmlspecialchars($__lpConsistency['description'], ENT_QUOTES); ?>
       <?php if ($__lpConsistency['stddev'] !== null): ?>
-        (&#963; = <?php echo htmlspecialchars((string)$__lpConsistency['stddev'], ENT_QUOTES); ?>)
+        (SD = <?php echo htmlspecialchars((string)$__lpConsistency['stddev'], ENT_QUOTES); ?>)
       <?php endif; ?>
     </span>
   </div>
@@ -19238,7 +19355,7 @@ $__lpFmtRankColor = function($v) {
     <!-- Card 1: Best ranking setup example -->
     <div class="skai-lp-split-card skai-lp-split-card--sys">
       <div class="skai-lp-split-card-title">
-        <span class="skai-lp-split-card-title-icon">&#x1F4CA;</span>
+        <span class="skai-lp-split-card-title-icon"></span>
         Top Setup by Ranking Quality
       </div>
       <p class="skai-lp-split-card-desc">The saved run that placed the drawn numbers highest in the prediction list, plus training style and same-setup trend.</p>
@@ -19275,7 +19392,7 @@ $__lpFmtRankColor = function($v) {
         </div>
         <div class="skai-lp-split-kpi">
           <div class="skai-lp-split-kpi-label">Best Rank</div>
-          <div class="skai-lp-split-kpi-val"><?php echo ($__lpBestSystem['best_rank'] !== null) ? htmlspecialchars((string)$__lpBestSystem['best_rank'], ENT_QUOTES) : '&#8212;'; ?></div>
+          <div class="skai-lp-split-kpi-val"><?php echo ($__lpBestSystem['best_rank'] !== null) ? htmlspecialchars((string)$__lpBestSystem['best_rank'], ENT_QUOTES) : '--'; ?></div>
         </div>
         <div class="skai-lp-split-kpi">
           <div class="skai-lp-split-kpi-label">Weighted score</div>
@@ -19294,7 +19411,7 @@ $__lpFmtRankColor = function($v) {
     <!-- Card 2: Best hit setup example -->
     <div class="skai-lp-split-card skai-lp-split-card--opp">
       <div class="skai-lp-split-card-title">
-        <span class="skai-lp-split-card-title-icon">&#x1F3AF;</span>
+        <span class="skai-lp-split-card-title-icon"></span>
         Top Setup by Hit Count
       </div>
       <p class="skai-lp-split-card-desc">The saved run that matched the most actual drawn numbers, plus training style and same-setup trend.</p>
@@ -19350,7 +19467,7 @@ $__lpFmtRankColor = function($v) {
     <!-- Card 3: Recommended run -->
     <div class="skai-lp-split-card skai-lp-split-card--rec">
       <div class="skai-lp-split-card-title">
-        <span class="skai-lp-split-card-title-icon">&#x1F4CC;</span>
+        <span class="skai-lp-split-card-title-icon"></span>
         Suggested Next Setup
       </div>
       <p class="skai-lp-split-card-desc">The saved run that balanced ranking quality and hit coverage best. A good starting point for your next prediction.</p>
@@ -19430,12 +19547,12 @@ $__lpFmtRankColor = function($v) {
   <!-- -- Metric definitions (expanded with dual-model concepts) ----------- -->
   <div class="skai-lp-definitions">
     <details>
-      <summary>&#x2139;&#xFE0F; How these measures work</summary>
+      <summary>How these measures work</summary>
       <div class="skai-lp-def-grid">
         <div class="skai-lp-def-item">
           <strong>Performance grade</strong>
-          Based on Average winning rank: Elite (1&#8211;5), Strong (6&#8211;10),
-          Moderate (11&#8211;20), Weak (21+). Lower rank = better.
+          Based on Average winning rank: Elite (1-5), Strong (6-10),
+          Moderate (11-20), Weak (21+). Lower rank = better.
         </div>
         <div class="skai-lp-def-item">
           <strong>Average winning rank</strong>
@@ -19450,9 +19567,9 @@ $__lpFmtRankColor = function($v) {
         <div class="skai-lp-def-item">
           <strong>Strategy family</strong>
           The behavior group associated with the slider setting.
-          AI&#8209;Forward (70%+): Stronger model influence with lighter skip weighting.
-          Balanced Mix (31&#8211;69%): A steady AI / pattern blend.
-          Skip Pattern Boost (0&#8211;30%): Heavier weight on overdue and long-pattern behavior.
+          AI-Forward (70%+): Stronger model influence with lighter skip weighting.
+          Balanced Mix (31-69%): A steady AI / pattern blend.
+          Skip Pattern Boost (0-30%): Heavier weight on overdue and long-pattern behavior.
         </div>
         <div class="skai-lp-def-item">
           <strong>Best ranking setup example</strong>
@@ -19480,7 +19597,7 @@ $__lpFmtRankColor = function($v) {
         <div class="skai-lp-def-item">
           <strong>Consistency</strong>
           Standard deviation of avg ranks across all runs.
-          Low (&sigma;&lt;3) = High. Medium (&sigma;3&#8211;7) = Moderate. High (&sigma;&ge;7) = Volatile.
+          Low (&sigma;&lt;3) = High. Medium (&sigma;3-7) = Moderate. High (&sigma;&ge;7) = Volatile.
         </div>
         <div class="skai-lp-def-item">
           <strong>Overall trend direction</strong>
@@ -19494,7 +19611,7 @@ $__lpFmtRankColor = function($v) {
         </div>
         <div class="skai-lp-def-item">
           <strong>Weighted quality score</strong>
-          Sum of 1&#x2215;rank for each winning number found. Rewards numbers near
+          Sum of 1/rank for each winning number found. Rewards numbers near
           the top of the list much more heavily than those lower down.
         </div>
       </div>
@@ -19510,14 +19627,14 @@ $__lpFmtRankColor = function($v) {
                       text-transform:uppercase;letter-spacing:0.04em;padding:0.4rem 0;
                       list-style:none;display:-webkit-flex;display:flex;
                       -webkit-align-items:center;align-items:center;gap:0.4rem;">
-        <span class="skai-lp-history-title" style="margin:0;">&#x25BC; Run history</span>
+        <span class="skai-lp-history-title" style="margin:0;">Run history</span>
       </summary>
       <!-- Legend -->
       <div class="skai-lp-tbl-legend">
         <span class="lp-run-badge lp-run-badge--sys">Rank best</span> Strongest ranking quality &nbsp;&bull;&nbsp;
         <span class="lp-run-badge lp-run-badge--hit">Hit best</span> Strongest hit rate &nbsp;&bull;&nbsp;
         <span class="lp-run-badge lp-run-badge--rec">Rec</span> Recommended &nbsp;&bull;&nbsp;
-        &#x1F534; Worst overall rank
+        Worst overall rank
       </div>
       <div class="skai-lp-tbl-wrap">
         <table class="skai-lp-tbl">
@@ -19560,7 +19677,7 @@ $__lpFmtRankColor = function($v) {
               $__lpHSettingRaw = skaiLpFormatRunSettingLabel($__lpHAiPct, $__lpHStratF);
               $__lpHSetting = ($__lpHSettingRaw !== '')
                   ? htmlspecialchars($__lpHSettingRaw, ENT_QUOTES, 'UTF-8')
-                  : '<span style="color:#cbd5e1;font-size:0.75rem;">&#8212;</span>';
+                  : '<span style="color:#cbd5e1;font-size:0.75rem;">--</span>';
 
               // Determine row role class (sys best has priority for row tint)
               $__lpHRowCls  = '';
@@ -19572,8 +19689,8 @@ $__lpFmtRankColor = function($v) {
               if ($__lpHIdx === $__lpSysRowIdx)  { $__lpHBadges .= '<span class="lp-run-badge lp-run-badge--sys">Rank best</span>'; }
               if ($__lpHIdx === $__lpHitRowIdx)  { $__lpHBadges .= '<span class="lp-run-badge lp-run-badge--hit">Hit best</span>'; }
               if ($__lpHIdx === $__lpRecRowIdx)  { $__lpHBadges .= '<span class="lp-run-badge lp-run-badge--rec">Rec</span>'; }
-              if ($__lpHIdx === $__lpWorstRowIdx){ $__lpHBadges .= '<span style="font-size:0.9rem;" title="Worst overall avg rank">&#x1F534;</span>'; }
-              if ($__lpHBadges === '')            { $__lpHBadges = '<span style="color:#cbd5e1;font-size:0.75rem;">&#8212;</span>'; }
+              if ($__lpHIdx === $__lpWorstRowIdx){ $__lpHBadges .= '<span style="font-size:0.9rem;" title="Worst overall avg rank"></span>'; }
+              if ($__lpHBadges === '')            { $__lpHBadges = '<span style="color:#cbd5e1;font-size:0.75rem;">--</span>'; }
             ?>
             <tr class="<?php echo $__lpHRowCls; ?>">
               <td><?php echo $__lpHDStr; ?></td>
@@ -19585,10 +19702,10 @@ $__lpFmtRankColor = function($v) {
                 </span>
               </td>
               <td><?php echo $__lpFmtRankColor($__lpHAvg); ?></td>
-              <td><?php echo ($__lpHBest !== null) ? htmlspecialchars((string)$__lpHBest, ENT_QUOTES) : '&#8212;'; ?></td>
+              <td><?php echo ($__lpHBest !== null) ? htmlspecialchars((string)$__lpHBest, ENT_QUOTES) : '--'; ?></td>
               <td><?php echo (int)$__lpHR['top10_hits']; ?></td>
               <td><?php echo (int)$__lpHR['top20_hits']; ?></td>
-              <td><?php echo ($__lpHWSc !== null) ? htmlspecialchars((string)$__lpHWSc, ENT_QUOTES) : '&#8212;'; ?></td>
+              <td><?php echo ($__lpHWSc !== null) ? htmlspecialchars((string)$__lpHWSc, ENT_QUOTES) : '--'; ?></td>
               <td><?php echo (int)$__lpHR['missing_hits_count']; ?></td>
             </tr>
             <?php endforeach; ?>
@@ -20185,7 +20302,7 @@ if (!empty($settingLabels)) {
 
       <div class="mle-print-all-wrap" style="padding:0.75rem 1rem 1.25rem;">
         <button type="button" class="mle-print-all-btn" data-print-group-btn="1">
-          &#x1F5A8;&#xFE0E; Print All Predictions for This Lottery
+          Print All Predictions for This Lottery
         </button>
       </div>
 
@@ -20285,12 +20402,12 @@ if (!empty($settingLabels)) {
   <div class="mle-section-jump" aria-label="Numbers to Play quick navigation">
     <span class="mle-section-jump__label">Jump to</span>
     <div class="mle-section-jump__links">
-      <a href="#info-card">&#x1F4CB; Overview</a>
-      <a href="#mle-historical-validation-wrap">&#x1F3C6; Draw Results</a>
-      <a href="#my-lotteries">&#x1F3B2; My Lotteries</a>
-      <a href="#numbers-to-play">&#x1F3AF; Numbers to Play</a>
-      <a href="#favorite-lotteries">&#x2B50; Favorite Lotteries</a>
-      <a href="#favorite-wheeling-systems">&#x1F3A1; Wheeling Systems</a>
+      <a href="#info-card">Overview</a>
+      <a href="#mle-historical-validation-wrap">Draw Results</a>
+      <a href="#my-lotteries">My Lotteries</a>
+      <a href="#numbers-to-play">Numbers to Play</a>
+      <a href="#favorite-lotteries">Favorite Lotteries</a>
+      <a href="#favorite-wheeling-systems">Wheeling Systems</a>
     </div>
   </div>
 
@@ -20335,7 +20452,7 @@ if (!empty($settingLabels)) {
           <input type="hidden" name="play_set_id" value="<?php echo (int)$__play->id; ?>">
           <input class="mle-play-input" type="text" name="play_label" maxlength="80" value="<?php echo htmlspecialchars($__playLabel, ENT_QUOTES, 'UTF-8'); ?>" aria-label="Edit play set label" style="padding:0.35rem 0.5rem;border:1px solid #cdd8eb;border-radius:8px;font-size:0.78rem;min-width:120px;">
           <input class="mle-play-input" type="text" name="play_notes" maxlength="1000" value="<?php echo htmlspecialchars($__playNotes, ENT_QUOTES, 'UTF-8'); ?>" placeholder="Optional notes" aria-label="Edit play notes" style="padding:0.35rem 0.5rem;border:1px solid #cdd8eb;border-radius:8px;font-size:0.78rem;min-width:140px;">
-          <button type="submit" class="btn-secondary" style="font-size:0.78rem;padding:0.35rem 0.75rem;border-radius:8px;cursor:pointer;white-space:nowrap;">&#x1F4BE; Save</button>
+          <button type="submit" class="btn-secondary" style="font-size:0.78rem;padding:0.35rem 0.75rem;border-radius:8px;cursor:pointer;white-space:nowrap;">Save</button>
         </form>
 
         <form method="post" style="margin:0;">
@@ -20355,7 +20472,7 @@ if (!empty($settingLabels)) {
               <option value="<?php echo htmlspecialchars((string)($__wsOpt['system_id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars((string)($__wsOpt['name'] ?? ('System ' . ($__wsOpt['system_id'] ?? ''))), ENT_QUOTES, 'UTF-8'); ?></option>
             <?php endforeach; ?>
           </select>
-          <button type="submit" class="btn-primary" style="font-size:0.78rem;padding:0.35rem 0.75rem;border-radius:8px;cursor:pointer;white-space:nowrap;">&#x1F3AF; Go to Wheeling Systems Library</button>
+          <button type="submit" class="btn-primary" style="font-size:0.78rem;padding:0.35rem 0.75rem;border-radius:8px;cursor:pointer;white-space:nowrap;">Go to Wheeling Systems Library</button>
         </form>
 
         <form method="post" style="margin:0;">
@@ -20514,7 +20631,7 @@ $savedSettings = $db->loadAssocList() ?: [];
                   'activation_function' => 'ActFn',
                   'hidden_layers'       => 'Layers',
                   'walks'               => 'Walks',
-                  'burn_in'             => 'Burn&#8209;in',
+                  'burn_in'             => 'Burn-in',
                   'laplace_k'           => 'Laplace K',
                   'decay'               => 'Decay',
                   'chain_len'           => 'Chain Len',
@@ -20596,20 +20713,20 @@ $savedSettings = $db->loadAssocList() ?: [];
               style="font-size:0.75rem;padding:0.25rem 0.75rem;"
               onclick="mleApplyRecallSettings(this,<?php echo (int)$set['id']; ?>,<?php echo (int)$set['lottery_id']; ?>);return false;"
               aria-label="Apply saved settings: <?php echo htmlspecialchars($set['setting_name'], ENT_QUOTES, 'UTF-8'); ?>">
-              &#x2197; Use these settings
+              Use these settings
             </button>
             <button type="button"
               data-note-toggle="<?php echo (int)$set['id']; ?>"
               style="font-size:0.75rem;padding:0.25rem 0.75rem;border:1px solid #cbd5e1;border-radius:5px;cursor:pointer;background:#f8fafc;"
               onclick="mleToggleNoteEditor(<?php echo (int)$set['id']; ?>,true);"
               aria-label="Add or edit note for: <?php echo htmlspecialchars($set['setting_name'], ENT_QUOTES, 'UTF-8'); ?>">
-              &#x1F4DD; <?php echo ($__mleNoteAttr !== '') ? 'Edit Note' : 'Add Note'; ?>
+              <?php echo ($__mleNoteAttr !== '') ? 'Edit Note' : 'Add Note'; ?>
             </button>
 
 <form method="post" style="display:inline;" data-confirm-submit="Delete this saved settings template?">
   <?php echo \Joomla\CMS\HTML\HTMLHelper::_('form.token'); ?>
   <input type="hidden" name="delete_setting_template" value="<?php echo (int)$set['id']; ?>">
-  <button type="submit" class="btn-danger" style="font-size:0.75rem; padding:0.25rem 0.75rem;" aria-label="Delete saved settings: <?php echo htmlspecialchars($set['setting_name'], ENT_QUOTES, 'UTF-8'); ?>">&#x1F5D1; Delete</button>
+  <button type="submit" class="btn-danger" style="font-size:0.75rem; padding:0.25rem 0.75rem;" aria-label="Delete saved settings: <?php echo htmlspecialchars($set['setting_name'], ENT_QUOTES, 'UTF-8'); ?>">Delete</button>
 </form>
           </div>
 
@@ -20640,12 +20757,12 @@ $savedSettings = $db->loadAssocList() ?: [];
   <div class="mle-section-jump" aria-label="Favorite Lotteries quick navigation" style="margin:0.75rem 1rem 0;">
     <span class="mle-section-jump__label">Jump to</span>
     <div class="mle-section-jump__links">
-      <a href="#info-card">&#x1F4CB; Overview</a>
-      <a href="#mle-historical-validation-wrap">&#x1F3C6; Draw Results</a>
-      <a href="#my-lotteries">&#x1F3B2; My Lotteries</a>
-      <a href="#numbers-to-play">&#x1F3AF; Numbers to Play</a>
-      <a href="#favorite-lotteries">&#x2B50; Favorite Lotteries</a>
-      <a href="#favorite-wheeling-systems">&#x1F3A1; Wheeling Systems</a>
+      <a href="#info-card">Overview</a>
+      <a href="#mle-historical-validation-wrap">Draw Results</a>
+      <a href="#my-lotteries">My Lotteries</a>
+      <a href="#numbers-to-play">Numbers to Play</a>
+      <a href="#favorite-lotteries">Favorite Lotteries</a>
+      <a href="#favorite-wheeling-systems">Wheeling Systems</a>
     </div>
   </div>
 
@@ -21035,6 +21152,20 @@ html[data-mle-mode="beginner"] .mle-adv-proof-history{display:block}
 .mle-batch-cleanup__group--archive{border-color:#fca5a5;background:#fef2f2}
 .mle-batch-cleanup__group-label{font-weight:700;color:#374151;margin-bottom:.25rem;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}
 .mle-batch-cleanup__run{color:#475569;font-size:.78rem}
+/* Mode visibility: nonadvanced-only (beginner + standard), advanced-only */
+.mle-advanced-only{display:none}
+html[data-mle-mode="advanced"] .mle-advanced-only{display:block !important}
+html[data-mle-mode="advanced"] .mle-nonadvanced-only{display:none !important}
+/* Decision row variant */
+.mle-adv-row--decision{padding-top:.65rem}
+.mle-adv-row--note{background:#f0f9ff;border-radius:.375rem;padding:.5rem .6rem;margin:.25rem 0}
+.mle-adv-row--note .mle-adv-row__label{color:#0369a1}
+.mle-adv-row--note .mle-adv-row__value{color:#0c4a6e;font-size:.83rem}
+/* Settings detail expansion */
+.mle-adv-settings-detail{background:#f0f9ff;border:1px solid #bae6fd;border-radius:.5rem;padding:.85rem 1rem}
+/* Ghost button (Leave As Is) */
+.mle-advisory-btn--ghost{background:transparent;color:#64748b;border-color:#e2e8f0}
+.mle-advisory-btn--ghost:hover{background:#f8fafc}
 @media(max-width:640px){.mle-advisory-card__header{flex-direction:column}.mle-adv-row{flex-direction:column;gap:.2rem}.mle-adv-row__label{min-width:0}.mle-leaderboard__meta{display:none}.mle-batch-cleanup__groups{flex-direction:column}}
 </style>
 <div class="mle-wheel-fav-section" id="favorite-wheeling-systems">
@@ -21044,12 +21175,12 @@ html[data-mle-mode="beginner"] .mle-adv-proof-history{display:block}
   <div class="mle-section-jump" aria-label="My Favorite Wheeling Systems quick navigation">
     <span class="mle-section-jump__label">Jump to</span>
     <div class="mle-section-jump__links">
-      <a href="#info-card">&#x1F4CB; Overview</a>
-      <a href="#mle-historical-validation-wrap">&#x1F3C6; Draw Results</a>
-      <a href="#my-lotteries">&#x1F3B2; My Lotteries</a>
-      <a href="#numbers-to-play">&#x1F3AF; Numbers to Play</a>
-      <a href="#favorite-lotteries">&#x2B50; Favorite Lotteries</a>
-      <a href="#favorite-wheeling-systems">&#x1F3A1; Wheeling Systems</a>
+      <a href="#info-card">Overview</a>
+      <a href="#mle-historical-validation-wrap">Draw Results</a>
+      <a href="#my-lotteries">My Lotteries</a>
+      <a href="#numbers-to-play">Numbers to Play</a>
+      <a href="#favorite-lotteries">Favorite Lotteries</a>
+      <a href="#favorite-wheeling-systems">Wheeling Systems</a>
     </div>
   </div>
 
@@ -23149,7 +23280,7 @@ initLotteryCollapse();
         break;
       }
     }
-    btn.innerHTML = anyExpanded ? '&#x25BC; Collapse All' : '&#x25BA; Expand All';
+    btn.innerHTML = anyExpanded ? 'Collapse All' : ' Expand All';
     btn.setAttribute('aria-expanded', anyExpanded ? 'true' : 'false');
   }
 
@@ -24737,7 +24868,7 @@ function skaiCiSetCollapsed(sectionId, collapsed) {
   if (body) { body.style.display = collapsed ? 'none' : ''; }
   if (header) { header.setAttribute('aria-expanded', collapsed ? 'false' : 'true'); }
   if (btn) {
-    btn.innerHTML = collapsed ? '&#x25BA; Expand' : '&#x25BC; Collapse';
+    btn.innerHTML = collapsed ? ' Expand' : 'Collapse';
     btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
   }
   try { localStorage.setItem('mle_ci_collapsed_' + sectionId, collapsed ? 'true' : 'false'); } catch (e) {}
@@ -24771,7 +24902,7 @@ function skaiCiRefreshToggleAll() {
   }
   var allBtn = document.getElementById('mle-ci-toggle-all');
   if (allBtn) {
-    allBtn.innerHTML = anyOpen ? '&#x25BC; Collapse all' : '&#x25BA; Expand all';
+    allBtn.innerHTML = anyOpen ? 'Collapse all' : ' Expand all';
     allBtn.setAttribute('aria-expanded', anyOpen ? 'true' : 'false');
   }
 }
@@ -24998,7 +25129,7 @@ function mleSaveNote(evt, settingId) {
       // Update "Add Note / Edit Note" toggle buttons using data-note-toggle attribute
       var btns = document.querySelectorAll('[data-note-toggle="' + settingId + '"]');
       for (var i = 0; i < btns.length; i++) {
-        btns[i].innerHTML = (noteVal ? '&#x1F4DD; Edit Note' : '&#x1F4DD; Add Note');
+        btns[i].innerHTML = (noteVal ? 'Edit Note' : 'Add Note');
       }
       mleToggleNoteEditor(settingId, false);
     })
