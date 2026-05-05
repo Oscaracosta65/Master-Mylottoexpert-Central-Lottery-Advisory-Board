@@ -3247,7 +3247,7 @@ function mleAdvisoryGetProofLevelLabel($completedDraws, $totalScoredRuns, $topMe
             return array('level' => 'close_race', 'label' => 'Close Race',
                 'description' => 'Two methods are very close. Test both for a few more completed draws before choosing one.');
         }
-        return array('level' => 'trusted_recipe', 'label' => 'Trusted Recipe',
+        return array('level' => 'trusted_recipe', 'label' => 'Trusted Settings',
             'description' => 'Strong repeated support across many completed draws.');
     }
     if ($completedDraws >= 5 && $totalScoredRuns >= 10) {
