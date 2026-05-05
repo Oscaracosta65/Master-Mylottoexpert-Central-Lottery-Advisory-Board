@@ -16460,7 +16460,6 @@ foreach ($bestOpps as $__sopp) {
     <span class="mle-section-jump__label">Jump to</span>
     <div class="mle-section-jump__links">
       <a href="#info-card">Overview</a>
-      <a href="#mle-historical-validation-wrap">Draw Results</a>
       <a href="#my-lotteries">My Lotteries</a>
       <a href="#numbers-to-play">Numbers to Play</a>
       <a href="#favorite-lotteries">Favorite Lotteries</a>
@@ -16915,7 +16914,7 @@ foreach ($bestOpps as $__sopp) {
   </div>
 <?php endif; ?>
 
-<?php if (! empty($groups) ): ?>
+<?php /* STANDALONE_SP_START - all content inside this block is preserved for reference only and must not render */ if (false): ?>
 
 <!-- Saved Predictions are now shown inside each lottery advisory card above. The standalone section below is preserved for reference but not rendered. -->
 <!-- ==================================================
@@ -20343,7 +20342,7 @@ $__lpFmtRankColor = function($v) {
     </details>
   </div>
 
-  <?php endif; ?>
+  <?php endif; /* STANDALONE_SP_END */  ?>
 
 </div>
 <!-- == END LEARNING PERFORMANCE PANEL ================================== -->
@@ -23919,69 +23918,6 @@ function initLotteryCollapse() {
 // Initialize lottery collapse functionality
 initLotteryCollapse();
 
-// Set the initial label of the "Collapse All / Expand All" global button.
-(function() {
-  var allBtn = document.getElementById('mle-lottery-toggle-all-btn');
-  if (!allBtn) { return; }
-  var groups = document.querySelectorAll('.lottery-group');
-  var anyExpanded = false;
-  for (var i = 0; i < groups.length; i++) {
-    if (!groups[i].classList.contains('collapsed')) { anyExpanded = true; break; }
-  }
-  allBtn.textContent = anyExpanded ? '[-] Collapse All' : '[+] Expand All';
-}());
-
-// Restore Prediction Results section collapse state from localStorage.
-(function() {
-  Array.prototype.forEach.call(document.querySelectorAll('.prc-section'), function(sec) {
-    var sectionId = sec.id;
-    if (!sectionId) { return; }
-    try {
-      if (localStorage.getItem('prc_collapsed_' + sectionId) === 'true') {
-        skaiPrcSetCollapsed(sec, true);
-      }
-    } catch (e) { /* localStorage unavailable (private browsing / quota) */ }
-  });
-})();
-
-// Initialize and handle the global Collapse All / Expand All control in Draw Results.
-(function() {
-  var btn = document.getElementById('mle-prc-toggle-all-btn');
-  if (!btn) { return; }
-
-  function syncLabel() {
-    var sections = document.querySelectorAll('.prc-section');
-    var anyExpanded = false;
-    for (var i = 0; i < sections.length; i++) {
-      if (!sections[i].classList.contains('collapsed')) {
-        anyExpanded = true;
-        break;
-      }
-    }
-    btn.innerHTML = anyExpanded ? 'Collapse All' : ' Expand All';
-    btn.setAttribute('aria-expanded', anyExpanded ? 'true' : 'false');
-  }
-
-  btn.addEventListener('click', function() {
-    var sections = document.querySelectorAll('.prc-section');
-    var anyExpanded = false;
-    for (var i = 0; i < sections.length; i++) {
-      if (!sections[i].classList.contains('collapsed')) {
-        anyExpanded = true;
-        break;
-      }
-    }
-    var collapseTo = anyExpanded;
-    for (var j = 0; j < sections.length; j++) {
-      skaiPrcSetCollapsed(sections[j], collapseTo);
-    }
-    syncLabel();
-  });
-
-  syncLabel();
-})();
-
-
 // ============================================================
 // Strategy Workspace -- Overview tab, PRE-DRAW mode (ES5, no deps)
 // ============================================================
@@ -25695,33 +25631,8 @@ document.addEventListener('click', function(evt) {
       skaiPrcSelectUpcoming(node.getAttribute('data-prc-section-id'));
       return;
     }
-    if (node.getAttribute && node.getAttribute('data-lottery-toggle-all-btn') === '1') {
-      skaiLotteryToggleAll(node);
-      return;
-    }
     if (node.getAttribute && node.getAttribute('data-lottery-toggle-btn') === '1') {
       skaiLotteryToggle(node);
-      return;
-    }
-    // Outer lottery-group toggle (new two-level grouping)
-    if (node.getAttribute && node.getAttribute('data-outer-lottery-toggle-btn') !== null) {
-      var outerEl = node.closest ? node.closest('.mle-lottery-outer') : (function() {
-        var el = node;
-        while (el && !(el.classList && el.classList.contains('mle-lottery-outer'))) { el = el.parentElement; }
-        return el;
-      }());
-      if (outerEl) { mleOuterLotteryToggle(outerEl); }
-      if (evt.stopPropagation) { evt.stopPropagation(); } else { evt.cancelBubble = true; }
-      return;
-    }
-    // Click on the outer header itself (anywhere except the inner button)
-    if (node.getAttribute && node.getAttribute('data-outer-lottery-toggle') !== null) {
-      var outerEl2 = node.closest ? node.closest('.mle-lottery-outer') : (function() {
-        var el = node;
-        while (el && !(el.classList && el.classList.contains('mle-lottery-outer'))) { el = el.parentElement; }
-        return el;
-      }());
-      if (outerEl2) { mleOuterLotteryToggle(outerEl2); }
       return;
     }
     if (node.getAttribute && node.getAttribute('data-print-group-btn') === '1') {
