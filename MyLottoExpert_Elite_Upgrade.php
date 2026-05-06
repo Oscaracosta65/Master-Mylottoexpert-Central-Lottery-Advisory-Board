@@ -5083,12 +5083,15 @@ if ($__mleAction === 'save_advisory_recipe') {
     if ($__advBaseRunId <= 0) { $__advBaseRunId = $app->input->getInt('base_saved_number_id', 0); }
     // Also accept source_method as fallback for method
     if (empty($__advMethod)) { $__advMethod = strtolower(trim($app->input->getString('source_method', ''))); }
+    $__advIsAjax = (bool)$app->input->getInt('mle_ajax', 0);
     if ($__advLotteryId <= 0 || empty($__advMethod)) {
+        if ($__advIsAjax) { $app->setHeader('Content-Type', 'application/json; charset=utf-8', true); echo json_encode(array('ok' => false, 'error' => 'Missing required parameters.')); exit; }
         $app->enqueueMessage('Missing required parameters. Please try again.', 'error');
         $app->redirect(\Joomla\CMS\Uri\Uri::getInstance()->toString());
         return;
     }
     if ($__advBaseId <= 0 && $__advBaseRunId <= 0) {
+        if ($__advIsAjax) { $app->setHeader('Content-Type', 'application/json; charset=utf-8', true); echo json_encode(array('ok' => false, 'error' => 'missing_base', 'msg' => 'LottoExpert could not create the recommended next settings run because the full base settings could not be found. Please save the source settings first.')); exit; }
         $app->enqueueMessage('LottoExpert could not find the full base settings, so the recommended settings run was not saved. Please save the source settings first.', 'error');
         $app->redirect(\Joomla\CMS\Uri\Uri::getInstance()->toString());
         return;
@@ -5168,6 +5171,7 @@ if ($__mleAction === 'save_advisory_recipe') {
     }
     // 3. If settings could not be resolved, abort with a clear message
     if (!$__advBaseLoaded || empty($__advParams)) {
+        if ($__advIsAjax) { $app->setHeader('Content-Type', 'application/json; charset=utf-8', true); echo json_encode(array('ok' => false, 'error' => 'missing_base', 'msg' => 'LottoExpert could not create the recommended next settings run because the full base settings could not be found. Please save the source settings first.')); exit; }
         $app->enqueueMessage('LottoExpert could not find the full base settings, so the recommended settings run was not saved. Please save the source settings first.', 'error');
         $app->redirect(\Joomla\CMS\Uri\Uri::getInstance()->toString());
         return;
@@ -5221,9 +5225,19 @@ if ($__mleAction === 'save_advisory_recipe') {
         } else {
             $confirmMsg = 'Recommended settings run created for ' . $__advMethodLabel . '.';
         }
+        if ($__advIsAjax) {
+            $app->setHeader('Content-Type', 'application/json; charset=utf-8', true);
+            echo json_encode(array('ok' => true, 'setting_label' => $__advSettingLabel, 'msg' => $confirmMsg));
+            exit;
+        }
         $app->enqueueMessage(htmlspecialchars($confirmMsg, ENT_QUOTES, 'UTF-8'), 'message');
     } catch (\Throwable $e) {
         error_log('[MLE Advisory] save_advisory_recipe error: ' . $e->getMessage());
+        if ($__advIsAjax) {
+            $app->setHeader('Content-Type', 'application/json; charset=utf-8', true);
+            echo json_encode(array('ok' => false, 'error' => 'db_error', 'msg' => 'Unable to save recommended settings run. Please try again.'));
+            exit;
+        }
         $app->enqueueMessage('Unable to save recommended settings run. Please try again.', 'error');
     }
     $app->redirect(\Joomla\CMS\Uri\Uri::getInstance()->toString());
@@ -5398,11 +5412,19 @@ if ($__mleAction === 'apply_evidence_choices') {
     $allArraysEmpty = empty(array_filter($__advKeepIds, function($v) { return $v > 0; }))
                    && empty(array_filter($__advWatchIds, function($v) { return $v > 0; }))
                    && empty(array_filter($__advRetireIds, function($v) { return $v > 0; }));
+    $__ecIsAjax = (bool)$app->input->getInt('mle_ajax', 0);
     if ($allArraysEmpty) {
+        if ($__ecIsAjax) { $app->setHeader('Content-Type', 'application/json; charset=utf-8', true); echo json_encode(array('ok' => false, 'error' => 'No evidence choices were available to apply for this lottery.')); exit; }
         $app->enqueueMessage('No evidence choices were available to apply for this lottery.', 'notice');
     } elseif ($updated > 0) {
+        if ($__ecIsAjax) {
+            $app->setHeader('Content-Type', 'application/json; charset=utf-8', true);
+            echo json_encode(array('ok' => true, 'updated' => $updated, 'keep' => count($__advKeepIds), 'watch' => count($__advWatchIds), 'retire' => count($__advRetireIds)));
+            exit;
+        }
         $app->enqueueMessage('Evidence choices applied. ' . $updated . ' runs updated.', 'message');
     } else {
+        if ($__ecIsAjax) { $app->setHeader('Content-Type', 'application/json; charset=utf-8', true); echo json_encode(array('ok' => false, 'error' => 'No evidence choices were changed. LottoExpert could not match the submitted evidence rows to active saved runs.')); exit; }
         $app->enqueueMessage('No evidence choices were changed. LottoExpert could not match the submitted evidence rows to active saved runs.', 'notice');
     }
     $__ecUri = \Joomla\CMS\Uri\Uri::getInstance();
@@ -5418,6 +5440,62 @@ if ($__mleAction === 'apply_batch_cleanup') {
     $app->enqueueMessage('This action is no longer supported. Please use the evidence choices form on each lottery card.', 'warning');
     $app->redirect(\Joomla\CMS\Uri\Uri::getInstance()->toString());
     return;
+}
+
+// ------------------------------------------------------------------
+// update_run_advice_status  (JSON response)
+// ------------------------------------------------------------------
+if ($__mleAction === 'update_run_advice_status') {
+    $app->setHeader('Content-Type', 'application/json; charset=utf-8', true);
+    if (!\Joomla\CMS\Session\Session::checkToken('post')) { echo json_encode(array('ok' => false, 'error' => 'Invalid token.')); exit; }
+    if (MLE_DEMO_MODE) { echo json_encode(array('ok' => false, 'error' => 'Demo mode.')); exit; }
+    if ($workspaceUserId <= 0) { echo json_encode(array('ok' => false, 'error' => 'Not logged in.')); exit; }
+    $__uraRunId  = $app->input->getInt('run_id', 0);
+    $__uraStatus = strtolower(trim($app->input->getString('status', '')));
+    if ($__uraRunId <= 0) { echo json_encode(array('ok' => false, 'error' => 'Missing run_id.')); exit; }
+    if (!in_array($__uraStatus, array('use_in_advice', 'watch', 'retired', ''), true)) { echo json_encode(array('ok' => false, 'error' => 'Invalid status.')); exit; }
+    mleAdvisoryEnsureSchemaColumns($db);
+    try {
+        $prefix = $db->getPrefix();
+        $q = $db->getQuery(true)
+            ->update($db->quoteName($prefix . 'skai_learning_performance'))
+            ->set($db->quoteName('advice_status') . ' = ' . ($__uraStatus === '' ? 'NULL' : $db->quote($__uraStatus)))
+            ->where($db->quoteName('id')      . ' = ' . $__uraRunId)
+            ->where($db->quoteName('user_id') . ' = ' . $workspaceUserId);
+        $db->setQuery($q);
+        $db->execute();
+        echo json_encode(array('ok' => true, 'status' => $__uraStatus, 'run_id' => $__uraRunId));
+    } catch (\Throwable $e) {
+        error_log('[MLE Advisory] update_run_advice_status error: ' . $e->getMessage());
+        echo json_encode(array('ok' => false, 'error' => 'Database error.'));
+    }
+    exit;
+}
+
+// ------------------------------------------------------------------
+// delete_saved_run  (JSON response)
+// ------------------------------------------------------------------
+if ($__mleAction === 'delete_saved_run') {
+    $app->setHeader('Content-Type', 'application/json; charset=utf-8', true);
+    if (!\Joomla\CMS\Session\Session::checkToken('post')) { echo json_encode(array('ok' => false, 'error' => 'Invalid token.')); exit; }
+    if (MLE_DEMO_MODE) { echo json_encode(array('ok' => false, 'error' => 'Demo mode.')); exit; }
+    if ($workspaceUserId <= 0) { echo json_encode(array('ok' => false, 'error' => 'Not logged in.')); exit; }
+    $__dsrId = $app->input->getInt('saved_number_id', 0);
+    if ($__dsrId <= 0) { echo json_encode(array('ok' => false, 'error' => 'Missing saved_number_id.')); exit; }
+    try {
+        $prefix = $db->getPrefix();
+        $q = $db->getQuery(true)
+            ->delete($db->quoteName($prefix . 'user_saved_numbers'))
+            ->where($db->quoteName('id')      . ' = ' . $__dsrId)
+            ->where($db->quoteName('user_id') . ' = ' . $workspaceUserId);
+        $db->setQuery($q);
+        $db->execute();
+        echo json_encode(array('ok' => true, 'deleted_id' => $__dsrId));
+    } catch (\Throwable $e) {
+        error_log('[MLE Advisory] delete_saved_run error: ' . $e->getMessage());
+        echo json_encode(array('ok' => false, 'error' => 'Database error.'));
+    }
+    exit;
 }
 
 
@@ -8149,6 +8227,11 @@ html[data-mle-mode="beginner"] .mle-quick-nav__advanced,
 html[data-mle-mode="beginner"] .mle-standard-only,
 html[data-mle-mode="beginner"] .mle-advanced-only{display:none !important;}
 html[data-mle-mode="beginner"] .mle-adv-ec-section-wrap{display:none !important;}
+html[data-mle-mode="beginner"] .mle-adv-dr-group--older{display:none !important;}
+html[data-mle-mode="beginner"] .mle-adv-dr-group--upcoming{display:none !important;}
+html[data-mle-mode="beginner"] .mle-adv-proof-history{display:none !important;}
+html[data-mle-mode="standard"] .mle-adv-dr-group--older{display:none !important;}
+html[data-mle-mode="standard"] .mle-adv-dr-group--upcoming{display:block !important;}
 html[data-mle-mode="standard"] .mle-quick-nav__advanced{display:none !important;}
 @media (max-width:640px){.mle-mode-switch__actions{width:100%;}.mle-mode-switch__btn{flex:1 1 100%;}}
 
@@ -12563,6 +12646,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
       <p class="mle-adv-optfocus__desc" style="font-size:.83rem;color:#334155;margin:0 0 .5rem;line-height:1.5">LottoExpert is using your active saved runs and completed draw results to narrow toward the most consistent settings for this lottery.</p>
       <div class="mle-adv-optfocus__grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.4rem .75rem;font-size:.82rem">
         <div><span style="font-weight:700;color:#64748b">Best direction:</span> <strong><?php echo $__advTopMLabel; ?></strong></div>
+        <?php if ($__advWhySupport !== ''): ?><div><span style="font-weight:700;color:#64748b">Why this is leading:</span> <?php echo $__advWhySupport; ?></div><?php endif; ?>
         <?php if ($__advBestRecipe !== ''): ?><div><span style="font-weight:700;color:#64748b">Best settings profile so far:</span> <?php echo $__advBestRecipe; ?></div><?php endif; ?>
         <?php if ($__advTryNextMain !== ''): ?><div><span style="font-weight:700;color:#64748b">Next test:</span> <?php echo $__advTryNextMain; ?></div><?php endif; ?>
         <?php if ($__advWhy !== ''): ?><div><span style="font-weight:700;color:#64748b">Why this test matters:</span> <?php echo $__advWhy; ?></div><?php endif; ?>
@@ -12648,7 +12732,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
         <?php elseif (!empty($__advBClean)): ?>
         <div class="mle-batch-cleanup" id="mle-evidence-panel-<?php echo $__advLid; ?>" style="margin-top:.25rem">
           <div class="mle-batch-cleanup__title">Run Selection for Better Advice</div>
-          <p class="mle-batch-cleanup__body">LottoExpert reviewed your saved runs and recommends which ones should guide future advice. Keeping stronger runs and removing weaker ones helps narrow toward the most consistent setup.</p>
+          <p class="mle-batch-cleanup__body">LottoExpert reviewed your saved runs and recommends which ones should guide future advice. Keeping stronger runs and removing weaker runs from advice helps narrow toward the most consistent setup.</p>
           <p class="mle-batch-cleanup__note">Removing from advice does not delete the prediction. It keeps the record but stops it from affecting future recommendations.</p>
 
           <?php if (!empty($__advClKeep)): ?>
@@ -12725,10 +12809,12 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
 
           <?php if (!MLE_DEMO_MODE): ?>
           <p class="mle-batch-cleanup__note" style="margin-top:.5rem">"Apply Run Selection" will mark the recommended runs as active, place runs that need more review on Watch, and remove weaker evidence from future advice. It will not delete your saved history.</p>
-          <form method="post" class="mle-advisory-actions" style="margin-top:.75rem">
+          <div id="mle-ec-msg-<?php echo $__advLid; ?>" style="display:none;margin:.5rem 0;padding:.6rem .75rem;border-radius:.375rem;font-size:.82rem"></div>
+          <form method="post" class="mle-advisory-actions" style="margin-top:.75rem" data-mle-ec-form="1" data-lottery-id="<?php echo $__advLid; ?>">
             <input type="hidden" name="mle_action"  value="apply_evidence_choices">
             <input type="hidden" name="lottery_id"  value="<?php echo $__advLid; ?>">
             <input type="hidden" name="draw_date"   value="<?php echo $__advClDate; ?>">
+            <input type="hidden" name="mle_ajax"    value="1">
             <?php foreach ($__advClKeep   as $__advR): ?><input type="hidden" name="keep_ids[]"   value="<?php echo (int)($__advR['id'] ?? 0); ?>"><?php endforeach; ?>
             <?php foreach ($__advClReview as $__advR): ?><input type="hidden" name="watch_ids[]"  value="<?php echo (int)($__advR['id'] ?? 0); ?>"><?php endforeach; ?>
             <?php foreach ($__advClRetire as $__advR): ?><input type="hidden" name="retire_ids[]" value="<?php echo (int)($__advR['id'] ?? 0); ?>"><?php endforeach; ?>
@@ -12744,13 +12830,27 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
     </div>
     <?php endif; ?>
 
-    <!-- 10. Recommended Settings Test (advisory recipe) -->
+    <!-- 10. Recommended Next Settings Run (advisory recipe) -->
     <?php if (!MLE_DEMO_MODE): ?>
     <div class="mle-adv-cta-panel" style="margin-top:.75rem">
       <div class="mle-adv-cta-panel__title" style="font-weight:600;margin-bottom:.35rem">Recommended Next Settings Run</div>
-      <p class="mle-adv-cta-panel__desc">LottoExpert will copy your best current settings, change only the recommended setting, and save it as a new settings run you can test next.</p>
-      <form method="post" class="mle-advisory-actions">
+      <p class="mle-adv-cta-panel__desc">LottoExpert reviewed your saved and scored runs for this lottery and identified the next best settings test. This will copy your strongest current settings, change only the recommended setting, and save a new test run so you can compare results after the next draw.</p>
+      <?php if ($__advHasAdv && $__advSLabel !== ''): ?>
+      <div class="mle-adv-cta-fields" style="margin:.5rem 0 .75rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.3rem .75rem;font-size:.82rem">
+        <?php if ($__advBaseRunId > 0): ?><div><span style="font-weight:700;color:#7F8DAA">Base run:</span> <span style="color:#e2e8f0">Run #<?php echo $__advBaseRunId; ?></span></div><?php endif; ?>
+        <div><span style="font-weight:700;color:#7F8DAA">Best method:</span> <span style="color:#e2e8f0"><?php echo $__advTopMLabel; ?></span></div>
+        <?php if ($__advBestRecipe !== ''): ?><div><span style="font-weight:700;color:#7F8DAA">Best current settings:</span> <span style="color:#e2e8f0"><?php echo $__advBestRecipe; ?></span></div><?php endif; ?>
+        <div><span style="font-weight:700;color:#7F8DAA">Setting to test:</span> <span style="color:#e2e8f0"><?php echo $__advSLabel; ?></span></div>
+        <div><span style="font-weight:700;color:#7F8DAA">Current value:</span> <span style="color:#e2e8f0"><?php echo $__advCurrVal; ?></span></div>
+        <div><span style="font-weight:700;color:#7F8DAA">Recommended value:</span> <span style="color:#93c5fd;font-weight:700"><?php echo $__advSugVal; ?></span></div>
+        <?php if ($__advWhy !== ''): ?><div style="grid-column:1/-1"><span style="font-weight:700;color:#7F8DAA">Why this change:</span> <span style="color:#e2e8f0"><?php echo $__advWhy; ?></span></div><?php endif; ?>
+        <?php if ($__advTryNextMain !== ''): ?><div style="grid-column:1/-1"><span style="font-weight:700;color:#7F8DAA">What this test is trying to prove:</span> <span style="color:#e2e8f0"><?php echo $__advTryNextMain; ?></span></div><?php endif; ?>
+      </div>
+      <?php endif; ?>
+      <div id="mle-recipe-msg-<?php echo $__advLid; ?>" style="display:none;margin:.5rem 0;padding:.6rem .75rem;border-radius:.375rem;font-size:.82rem"></div>
+      <form method="post" class="mle-advisory-actions" data-mle-recipe-form="1" data-lottery-id="<?php echo $__advLid; ?>">
         <input type="hidden" name="mle_action"              value="save_advisory_recipe">
+        <input type="hidden" name="mle_ajax"                value="1">
         <input type="hidden" name="lottery_id"              value="<?php echo $__advLid; ?>">
         <input type="hidden" name="base_saved_number_id"    value="<?php echo $__advBaseRunId; ?>">
         <input type="hidden" name="source_method"           value="<?php echo htmlspecialchars($__advTopMKey,  ENT_QUOTES, 'UTF-8'); ?>">
@@ -12767,15 +12867,22 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
     </div>
     <?php endif; ?>
 
-    <!-- 11. Draw Results Comparison (collapsed by default, visual ball-chip style) -->
+    <!-- 11. Visual Run Comparison (collapsed by default, visual ball-chip style) -->
     <?php
     $__advDrawResults = (array)($__advCard['draw_results'] ?? array());
     $__advDRBodyId    = 'mle-adv-dr-' . $__advLid;
-    // Build quick summary statistics for the strip above the comparison rows
+    $__drNow30        = time() - (30 * 24 * 60 * 60);
     $__drSummaryTotal  = 0;
     $__drSummaryBest   = 0;
     $__drSummaryMethod = '';
+    // Classify each run into recent-completed, older-completed, or upcoming groups
+    $__drSecRecent   = array();
+    $__drSecOlder    = array();
+    $__drSecUpcoming = array();
     foreach ($__advDrawResults as $__drDate => $__drGrp) {
+        $__drBestId = (int)($__drGrp['best_run_id'] ?? 0);
+        $__drDateTs = strtotime((string)$__drDate);
+        $__drIsRecent = ($__drDateTs && $__drDateTs >= $__drNow30);
         foreach ((array)($__drGrp['runs'] ?? array()) as $__drSR) {
             if (!empty($__drSR['has_draw'])) {
                 $__drSummaryTotal++;
@@ -12784,17 +12891,25 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
                     $__drSummaryBest   = $__drRunHitsS;
                     $__drSummaryMethod = mleAdvisoryMethodLabel((string)($__drSR['source'] ?? ''));
                 }
+                if ($__drIsRecent) {
+                    $__drSecRecent[]   = array('date' => $__drDate, 'run' => $__drSR, 'best_id' => $__drBestId);
+                } else {
+                    $__drSecOlder[]    = array('date' => $__drDate, 'run' => $__drSR, 'best_id' => $__drBestId);
+                }
+            } else {
+                $__drSecUpcoming[] = array('date' => $__drDate, 'run' => $__drSR, 'best_id' => $__drBestId);
             }
         }
     }
+    $__drCsrfName = \Joomla\CMS\Session\Session::getFormToken();
     ?>
     <?php if (!empty($__advDrawResults)): ?>
     <div class="mle-adv-section-collapse" style="margin-top:.75rem">
       <button type="button" class="mle-section-toggle" aria-expanded="false" aria-controls="<?php echo $__advDRBodyId; ?>">
-        <span>Show Draw Results Comparison</span>
+        <span>Show Visual Run Comparison</span>
       </button>
       <div id="<?php echo $__advDRBodyId; ?>" class="mle-section-body" style="display:none" aria-hidden="true">
-        <p class="mle-adv-section-desc">This shows how your saved predictions compared with the actual completed draw for this lottery.</p>
+        <p class="mle-adv-section-desc">This is the clearest proof of how your saved runs performed against completed draws.</p>
 
         <?php if ($__drSummaryTotal > 0): ?>
         <div class="mle-adv-dr-summary">
@@ -12802,8 +12917,6 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
           <?php if ($__drSummaryBest > 0): ?>
           <span class="mle-adv-dr-summary__sep">|</span>
           <span class="mle-adv-dr-summary__item"><strong>Best result so far:</strong> <?php echo $__drSummaryBest; ?> hit<?php echo $__drSummaryBest !== 1 ? 's' : ''; ?></span>
-          <span class="mle-adv-dr-summary__sep">|</span>
-          <span class="mle-adv-dr-summary__item"><strong>Best hit count so far:</strong> <?php echo $__drSummaryBest; ?></span>
           <?php endif; ?>
           <?php if ($__drSummaryMethod !== ''): ?>
           <span class="mle-adv-dr-summary__sep">|</span>
@@ -12812,40 +12925,40 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
         </div>
         <?php endif; ?>
 
-        <?php foreach ($__advDrawResults as $__drDate => $__drGroup):
-          $__drRuns    = (array)($__drGroup['runs']    ?? array());
-          $__drBestId  = (int)($__drGroup['best_run_id'] ?? 0);
-          if (empty($__drRuns)) { continue; }
-          $__drDateTs   = strtotime((string)$__drDate);
-          $__drDateDisp = ($__drDateTs && $__drDateTs > 0) ? date('M j, Y', $__drDateTs) : htmlspecialchars((string)$__drDate, ENT_QUOTES, 'UTF-8');
+        <?php
+        // Render helper: outputs all vrows for a given $__drSec array
+        // Each entry: array('date'=>..., 'run'=>..., 'best_id'=>...)
+        $__drRenderSec = function($__drSec, $__drCsrfName) {
+            foreach ($__drSec as $__drEntry):
+                $__drRun     = $__drEntry['run'];
+                $__drBestId  = $__drEntry['best_id'];
+                $__drDate    = $__drEntry['date'];
+                $__drDateTs  = strtotime((string)$__drDate);
+                $__drDateDisp = ($__drDateTs && $__drDateTs > 0) ? date('M j, Y', $__drDateTs) : htmlspecialchars((string)$__drDate, ENT_QUOTES, 'UTF-8');
+                $__drIsBest    = (int)($__drRun['run_id'] ?? 0) === $__drBestId;
+                $__drHasDraw   = !empty($__drRun['has_draw']);
+                $__drPerfId    = (int)($__drRun['perf_id']     ?? 0);
+                $__drSavedId   = (int)($__drRun['run_id']      ?? 0);
+                $__drMethod    = htmlspecialchars(mleAdvisoryMethodLabel((string)($__drRun['source'] ?? '')), ENT_QUOTES, 'UTF-8');
+                $__drLabel     = htmlspecialchars((string)($__drRun['label'] ?? ''), ENT_QUOTES, 'UTF-8');
+                $__drPredMain  = (array)($__drRun['pred_main']    ?? array());
+                $__drActMain   = (array)($__drRun['actual_main']  ?? array());
+                $__drActExtra  = (array)($__drRun['actual_extra'] ?? array());
+                $__drMainHits  = (int)($__drRun['hits_main']      ?? $__drRun['top10_hits'] ?? 0);
+                $__drRank      = round((float)($__drRun['avg_winning_rank'] ?? 0), 1);
+                $__drRowCss    = $__drIsBest ? ' mle-adv-dr-vrow--best' : '';
+                $__drActLookup  = ($__drHasDraw && !empty($__drActMain)) ? array_flip($__drActMain) : array();
+                $__drPredLookup = !empty($__drPredMain) ? array_flip($__drPredMain) : array();
+                $__drSrcKey     = (string)($__drRun['source'] ?? '');
+                $__drSrcClass   = 'prc-src-skip';
+                if ($__drSrcKey === 'ai_prediction')        { $__drSrcClass = 'prc-src-ai'; }
+                elseif ($__drSrcKey === 'mcmc_prediction')  { $__drSrcClass = 'prc-src-mcmc'; }
+                elseif ($__drSrcKey === 'skai_prediction')  { $__drSrcClass = 'prc-src-skai'; }
+                elseif ($__drSrcKey === 'heatmap')          { $__drSrcClass = 'prc-src-heatmap'; }
         ?>
-        <div class="mle-adv-dr-group" style="margin-bottom:1.25rem">
-          <div class="mle-adv-dr-group__date"><?php echo $__drDateDisp; ?></div>
-          <div class="mle-adv-dr-visual-rows">
-          <?php foreach ($__drRuns as $__drRun):
-            $__drIsBest    = (int)($__drRun['run_id'] ?? 0) === $__drBestId;
-            $__drHasDraw   = !empty($__drRun['has_draw']);
-            $__drMethod    = htmlspecialchars(mleAdvisoryMethodLabel((string)($__drRun['source'] ?? '')), ENT_QUOTES, 'UTF-8');
-            $__drLabel     = htmlspecialchars((string)($__drRun['label'] ?? ''), ENT_QUOTES, 'UTF-8');
-            $__drPredMain  = (array)($__drRun['pred_main']    ?? array());
-            $__drActMain   = (array)($__drRun['actual_main']  ?? array());
-            $__drActExtra  = (array)($__drRun['actual_extra'] ?? array());
-            $__drMainHits  = (int)($__drRun['hits_main']      ?? $__drRun['top10_hits'] ?? 0);
-            $__drRank      = round((float)($__drRun['avg_winning_rank'] ?? 0), 1);
-            $__drAdvStatus = (string)($__drRun['advice_status'] ?? '');
-            $__drRowCss    = $__drIsBest ? ' mle-adv-dr-vrow--best' : '';
-            $__drActLookup = ($__drHasDraw && !empty($__drActMain)) ? array_flip($__drActMain) : array();
-            $__drPredLookup = !empty($__drPredMain) ? array_flip($__drPredMain) : array();
-            $__drSrcKey    = (string)($__drRun['source'] ?? '');
-            $__drSrcClass  = 'prc-src-skip';
-            if ($__drSrcKey === 'ai_prediction')   { $__drSrcClass = 'prc-src-ai'; }
-            elseif ($__drSrcKey === 'mcmc_prediction') { $__drSrcClass = 'prc-src-mcmc'; }
-            elseif ($__drSrcKey === 'skai_prediction') { $__drSrcClass = 'prc-src-skai'; }
-            elseif ($__drSrcKey === 'heatmap')         { $__drSrcClass = 'prc-src-heatmap'; }
-          ?>
-          <div class="mle-adv-dr-vrow<?php echo $__drRowCss; ?>">
-
+          <div class="mle-adv-dr-vrow<?php echo $__drRowCss; ?>" data-perf-id="<?php echo $__drPerfId; ?>" data-saved-num-id="<?php echo $__drSavedId; ?>" data-date-disp="<?php echo htmlspecialchars($__drDateDisp, ENT_QUOTES, 'UTF-8'); ?>">
             <div class="mle-adv-dr-vrow__meta">
+              <span class="mle-adv-dr-vrow__date-lbl"><?php echo $__drDateDisp; ?></span>
               <?php if ($__drIsBest): ?><span class="mle-adv-dr-vrow__best-label">Overall best</span><?php endif; ?>
               <span class="prc-src <?php echo $__drSrcClass; ?>"><?php echo $__drMethod; ?></span>
               <?php if ($__drLabel !== ''): ?><span class="mle-adv-dr-vrow__label"><?php echo $__drLabel; ?></span><?php endif; ?>
@@ -12857,7 +12970,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
                 <span class="mle-adv-dr-vrow__balls">
                 <?php if (!empty($__drPredMain)):
                     foreach ($__drPredMain as $__drN):
-                      $__drNHit = $__drHasDraw && isset($__drActLookup[$__drN]);
+                        $__drNHit = $__drHasDraw && isset($__drActLookup[$__drN]);
                 ?><span class="prc-num<?php echo $__drNHit ? ' prc-num-hit' : ''; ?>"><?php echo (int)$__drN; ?></span><?php
                     endforeach;
                 else:
@@ -12899,11 +13012,45 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
               <?php endif; ?>
             </div>
 
+            <div class="mle-adv-dr-vrow__actions">
+              <button type="button" class="mle-vrc-btn mle-vrc-btn--use"     data-vrc-action="use_in_advice" data-perf-id="<?php echo $__drPerfId; ?>" data-saved-id="<?php echo $__drSavedId; ?>" data-csrf="<?php echo $__drCsrfName; ?>">Use for future advice</button>
+              <button type="button" class="mle-vrc-btn mle-vrc-btn--watch"   data-vrc-action="watch"         data-perf-id="<?php echo $__drPerfId; ?>" data-saved-id="<?php echo $__drSavedId; ?>" data-csrf="<?php echo $__drCsrfName; ?>">Keep for review</button>
+              <button type="button" class="mle-vrc-btn mle-vrc-btn--retire"  data-vrc-action="retired"       data-perf-id="<?php echo $__drPerfId; ?>" data-saved-id="<?php echo $__drSavedId; ?>" data-csrf="<?php echo $__drCsrfName; ?>">Do not use for advice</button>
+              <button type="button" class="mle-vrc-btn mle-vrc-btn--delete"  data-vrc-action="delete"        data-perf-id="<?php echo $__drPerfId; ?>" data-saved-id="<?php echo $__drSavedId; ?>" data-csrf="<?php echo $__drCsrfName; ?>"<?php echo $__drSavedId <= 0 ? ' disabled title="No saved number record found"' : ''; ?>>Delete run</button>
+            </div>
           </div>
-          <?php endforeach; ?>
+        <?php
+            endforeach;
+        };
+        ?>
+
+        <?php if (!empty($__drSecRecent)): ?>
+        <div class="mle-adv-dr-group mle-adv-dr-group--recent" style="margin-bottom:1.25rem">
+          <div class="mle-adv-dr-group__label">Recent Completed Runs</div>
+          <div class="mle-adv-dr-visual-rows">
+            <?php $__drRenderSec($__drSecRecent, $__drCsrfName); ?>
           </div>
         </div>
-        <?php endforeach; ?>
+        <?php endif; ?>
+
+        <?php if (!empty($__drSecOlder)): ?>
+        <div class="mle-adv-dr-group mle-adv-dr-group--older" style="margin-bottom:1.25rem">
+          <div class="mle-adv-dr-group__label">Older Completed Runs</div>
+          <div class="mle-adv-dr-visual-rows">
+            <?php $__drRenderSec($__drSecOlder, $__drCsrfName); ?>
+          </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if (!empty($__drSecUpcoming)): ?>
+        <div class="mle-adv-dr-group mle-adv-dr-group--upcoming" style="margin-bottom:1.25rem">
+          <div class="mle-adv-dr-group__label">Upcoming Saved Runs</div>
+          <div class="mle-adv-dr-visual-rows">
+            <?php $__drRenderSec($__drSecUpcoming, $__drCsrfName); ?>
+          </div>
+        </div>
+        <?php endif; ?>
+
       </div>
     </div>
     <?php endif; ?>
@@ -13108,7 +13255,181 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
         }
       }
     }
+    // E: Visual Run Comparison action buttons
+    if (btn.hasAttribute('data-vrc-action')) {
+      mleVrcAction(btn);
+    }
   });
+
+  // ---- Shared XHR helper (ES5) ----
+  function mleSendXhr(url, data, onDone) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', url, true);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState !== 4) { return; }
+      var ok = (xhr.status >= 200 && xhr.status < 300);
+      var resp = null;
+      try { resp = JSON.parse(xhr.responseText); } catch(ex) { resp = null; }
+      onDone(ok && resp, resp, xhr);
+    };
+    var pairs = [];
+    for (var k in data) {
+      if (Object.prototype.hasOwnProperty.call(data, k)) {
+        pairs.push(encodeURIComponent(k) + '=' + encodeURIComponent(data[k]));
+      }
+    }
+    xhr.send(pairs.join('&'));
+  }
+
+  function mleShowMsg(el, msg, isOk) {
+    el.innerHTML = msg;
+    el.style.display = 'block';
+    el.style.background = isOk ? '#f0fdf4' : '#fef2f2';
+    el.style.border     = '1px solid ' + (isOk ? '#a7f3d0' : '#fca5a5');
+    el.style.color      = isOk ? '#166534' : '#991b1b';
+    el.style.padding    = '.6rem .75rem';
+    el.style.borderRadius = '.375rem';
+    el.style.fontSize   = '.82rem';
+  }
+
+  // ---- C: AJAX handler for save_advisory_recipe form ----
+  document.addEventListener('submit', function(e) {
+    var form = e.target;
+    if (!form || !form.hasAttribute('data-mle-recipe-form')) { return; }
+    e.preventDefault();
+    var lid     = form.getAttribute('data-lottery-id') || '';
+    var msgEl   = document.getElementById('mle-recipe-msg-' + lid);
+    var btn     = form.querySelector('button[type="submit"]');
+    var sLabel  = (form.querySelector('[name="setting_label"]') || {}).value || 'the recommended setting';
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+    var data = {};
+    var fields = form.elements;
+    for (var i = 0; i < fields.length; i++) {
+      var f = fields[i];
+      if (f.name && f.type !== 'submit' && f.type !== 'button') { data[f.name] = f.value; }
+    }
+    mleSendXhr(window.location.href, data, function(parsed, resp) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Create Recommended Run'; }
+      if (parsed && resp && resp.ok) {
+        if (msgEl) { mleShowMsg(msgEl, 'Recommended next settings run created. LottoExpert copied your strongest current settings and changed only ' + sLabel + '.', true); }
+        if (btn) { btn.disabled = true; }
+      } else {
+        var errMsg = (resp && resp.error) ? resp.error : 'LottoExpert could not create the recommended next settings run because the full base settings could not be found. Please save the source settings first.';
+        if (msgEl) { mleShowMsg(msgEl, errMsg, false); }
+      }
+    });
+  });
+
+  // ---- G: AJAX handler for apply_evidence_choices form ----
+  document.addEventListener('submit', function(e) {
+    var form = e.target;
+    if (!form || !form.hasAttribute('data-mle-ec-form')) { return; }
+    e.preventDefault();
+    var lid     = form.getAttribute('data-lottery-id') || '';
+    var msgEl   = document.getElementById('mle-ec-msg-' + lid);
+    var btn     = form.querySelector('button[type="submit"]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Applying...'; }
+    var data = {};
+    var fields = form.elements;
+    for (var i = 0; i < fields.length; i++) {
+      var f = fields[i];
+      if (f.name && f.type !== 'submit' && f.type !== 'button') {
+        if (f.type === 'checkbox' || f.type === 'radio') {
+          if (f.checked) { data[f.name] = f.value; }
+        } else {
+          data[f.name] = f.value;
+        }
+      }
+    }
+    mleSendXhr(window.location.href, data, function(parsed, resp) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Apply Selection'; }
+      if (parsed && resp && resp.ok) {
+        var usedC    = parseInt(resp.used_count    || 0, 10);
+        var watchC   = parseInt(resp.watch_count   || 0, 10);
+        var retiredC = parseInt(resp.retired_count || 0, 10);
+        var html  = '<strong>Run selection applied.</strong><br>';
+        html += 'Used for future advice: ' + usedC + ' ';
+        html += '/ Kept for review: ' + watchC + ' ';
+        html += '/ Removed from advice: ' + retiredC + '<br>';
+        html += '<em>These choices will now shape future recommendations for this lottery.</em>';
+        if (msgEl) { mleShowMsg(msgEl, html, true); }
+        // hide pending-recommendation rows for this lottery
+        var pending = document.querySelectorAll('[data-ec-lid="' + lid + '"] .mle-adv-ec-pending-row');
+        for (var pi = 0; pi < pending.length; pi++) { pending[pi].style.display = 'none'; }
+      } else {
+        var errMsg = (resp && resp.error) ? resp.error : 'Run selection could not be applied. Please try again.';
+        if (msgEl) { mleShowMsg(msgEl, errMsg, false); }
+      }
+    });
+  });
+
+  // ---- E: VRC action button handler ----
+  function mleVrcAction(btn) {
+    var action   = btn.getAttribute('data-vrc-action');
+    var perfId   = btn.getAttribute('data-perf-id')  || '0';
+    var savedId  = btn.getAttribute('data-saved-id') || '0';
+    var csrf     = btn.getAttribute('data-csrf')     || '';
+    if (!action) { return; }
+    var vrow = btn.parentNode;
+    while (vrow && vrow !== document.body) {
+      if (vrow.classList && vrow.classList.contains('mle-adv-dr-vrow')) { break; }
+      vrow = vrow.parentNode;
+    }
+    var allBtns = btn.parentNode ? btn.parentNode.querySelectorAll('button') : [];
+    for (var bi = 0; bi < allBtns.length; bi++) { allBtns[bi].disabled = true; }
+    if (action === 'delete') {
+      if (parseInt(savedId, 10) <= 0) {
+        for (var bi2 = 0; bi2 < allBtns.length; bi2++) { allBtns[bi2].disabled = false; }
+        return;
+      }
+      var delData = { mle_action: 'delete_saved_run', mle_ajax: '1', saved_number_id: savedId };
+      delData[csrf] = '1';
+      mleSendXhr(window.location.href, delData, function(parsed, resp) {
+        if (parsed && resp && resp.ok) {
+          if (vrow) {
+            vrow.style.transition = 'opacity .3s';
+            vrow.style.opacity = '0';
+            setTimeout(function() { if (vrow.parentNode) { vrow.parentNode.removeChild(vrow); } }, 320);
+          }
+        } else {
+          for (var bi3 = 0; bi3 < allBtns.length; bi3++) { allBtns[bi3].disabled = false; }
+          var errTxt = (resp && resp.error) ? resp.error : 'Could not delete run. Please try again.';
+          var errEl = document.createElement('span');
+          errEl.style.cssText = 'font-size:.78rem;color:#991b1b;margin-left:.5rem';
+          errEl.textContent = errTxt;
+          if (btn.parentNode) { btn.parentNode.appendChild(errEl); setTimeout(function() { if (errEl.parentNode) { errEl.parentNode.removeChild(errEl); } }, 5000); }
+        }
+      });
+    } else {
+      var statusMap = { use_in_advice: 'use_in_advice', watch: 'watch', retired: 'retired' };
+      var status = statusMap[action] || action;
+      var statusData = { mle_action: 'update_run_advice_status', mle_ajax: '1', run_id: perfId, status: status };
+      statusData[csrf] = '1';
+      mleSendXhr(window.location.href, statusData, function(parsed, resp) {
+        for (var bi4 = 0; bi4 < allBtns.length; bi4++) { allBtns[bi4].disabled = false; }
+        if (parsed && resp && resp.ok) {
+          var labelMap = { use_in_advice: 'Used for future advice', watch: 'Kept for review', retired: 'Not used for advice' };
+          var confirmEl = document.createElement('span');
+          confirmEl.style.cssText = 'font-size:.78rem;color:#166534;margin-left:.5rem';
+          confirmEl.textContent = '\u2713 ' + (labelMap[action] || action);
+          if (btn.parentNode) {
+            var old = btn.parentNode.querySelector('.mle-vrc-status-lbl');
+            if (old) { btn.parentNode.removeChild(old); }
+            confirmEl.className = 'mle-vrc-status-lbl';
+            btn.parentNode.appendChild(confirmEl);
+          }
+        } else {
+          var errTxt2 = (resp && resp.error) ? resp.error : 'Status could not be updated. Please try again.';
+          var errEl2 = document.createElement('span');
+          errEl2.style.cssText = 'font-size:.78rem;color:#991b1b;margin-left:.5rem';
+          errEl2.textContent = errTxt2;
+          if (btn.parentNode) { btn.parentNode.appendChild(errEl2); setTimeout(function() { if (errEl2.parentNode) { errEl2.parentNode.removeChild(errEl2); } }, 5000); }
+        }
+      });
+    }
+  }
 }());
 </script>
 
@@ -22352,6 +22673,24 @@ html[data-mle-mode="advanced"] .mle-nonadvanced-only{display:none !important}
 .mle-adv-dr-vrow__rank{font-size:.72rem;color:#94a3b8;white-space:nowrap}
 .mle-adv-dr-vrow__best-label{font-size:.72rem;font-weight:700;color:#15803d;background:#dcfce7;padding:.1rem .35rem;border-radius:.25rem;white-space:nowrap}
 @media(max-width:640px){.mle-adv-dr-vrow{flex-direction:column}.mle-adv-dr-vrow__hits{align-items:flex-start;text-align:left}.mle-adv-dr-vrow__numbers-label{min-width:80px}}
+/* VRC group labels */
+.mle-adv-dr-group__label{font-size:.8rem;font-weight:700;color:#1e3a5f;margin-bottom:.4rem;padding:.2rem .5rem .2rem 0;border-bottom:2px solid #dbeafe;display:block}
+.mle-adv-dr-group--recent .mle-adv-dr-group__label{border-bottom-color:#86efac;color:#166534}
+.mle-adv-dr-group--older  .mle-adv-dr-group__label{border-bottom-color:#e2e8f0;color:#475569}
+.mle-adv-dr-group--upcoming .mle-adv-dr-group__label{border-bottom-color:#fde68a;color:#92400e}
+.mle-adv-dr-vrow__date-lbl{font-size:.72rem;color:#64748b;white-space:nowrap}
+/* VRC action buttons */
+.mle-adv-dr-vrow__actions{width:100%;display:flex;flex-wrap:wrap;gap:.25rem;margin-top:.2rem;padding-top:.3rem;border-top:1px solid #f1f5f9}
+.mle-vrc-btn{font-size:.72rem;padding:.2rem .55rem;border-radius:.25rem;border:1px solid;cursor:pointer;font-weight:600;transition:background .15s,color .15s}
+.mle-vrc-btn--use   {background:#dcfce7;color:#166534;border-color:#86efac}
+.mle-vrc-btn--use:hover   {background:#bbf7d0}
+.mle-vrc-btn--watch {background:#e0f2fe;color:#0369a1;border-color:#bae6fd}
+.mle-vrc-btn--watch:hover {background:#bae6fd}
+.mle-vrc-btn--retire{background:#fef3c7;color:#92400e;border-color:#fde68a}
+.mle-vrc-btn--retire:hover{background:#fde68a}
+.mle-vrc-btn--delete{background:#fee2e2;color:#991b1b;border-color:#fca5a5}
+.mle-vrc-btn--delete:hover{background:#fca5a5}
+.mle-vrc-btn:disabled{opacity:.5;cursor:not-allowed}
 </style>
 <div class="mle-wheel-fav-section" id="favorite-wheeling-systems">
   <h2>My Favorite Wheeling Systems</h2>
