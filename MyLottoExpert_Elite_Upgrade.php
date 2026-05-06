@@ -5405,7 +5405,9 @@ if ($__mleAction === 'apply_evidence_choices') {
     } else {
         $app->enqueueMessage('No evidence choices were changed. LottoExpert could not match the submitted evidence rows to active saved runs.', 'notice');
     }
-    $app->redirect(\Joomla\CMS\Uri\Uri::getInstance()->toString());
+    $__ecUri = \Joomla\CMS\Uri\Uri::getInstance();
+    if ($updated > 0) { $__ecUri->setVar('mle_ec_applied', (int)$__advEcLotteryId); }
+    $app->redirect($__ecUri->toString());
     return;
 }
 
@@ -12366,6 +12368,7 @@ $__mleModeHelperText = array(
 <!-- -- Advisory Board: Today's LottoExpert Advice ----------------------- -->
 <?php
 // Advisory Board Section
+$__mleEcApplied = (int)$app->input->getInt('mle_ec_applied', 0);
 $__mleAdvData   = mleAdvisoryLoadAllLotteryCards($db, $workspaceUserId);
 $__mleAdvHas    = (bool)($__mleAdvData['has_any_data'] ?? false);
 $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
@@ -12594,105 +12597,131 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
     </div>
 
     <!-- 9. Evidence Choices for This Lottery (batch cleanup) -->
-    <?php if (!empty($__advBClean)):
-      $__advClTotal  = (int)($__advBClean['total_runs'] ?? 0);
-      $__advClDate   = htmlspecialchars((string)($__advBClean['draw_date'] ?? ''), ENT_QUOTES, 'UTF-8');
-      $__advClKeep   = (array)($__advBClean['keep']   ?? array());
-      $__advClReview = (array)($__advBClean['review'] ?? array());
-      $__advClRetire = (array)($__advBClean['retire'] ?? array());
+    <?php
+    $__advEcBodyId  = 'mle-adv-ec-' . $__advLid;
+    $__advShowEc    = !empty($__advBClean) || ($__mleEcApplied > 0 && $__mleEcApplied === $__advLid);
+    if ($__advShowEc) {
+        if (!empty($__advBClean)) {
+            $__advClDate   = htmlspecialchars((string)($__advBClean['draw_date'] ?? ''), ENT_QUOTES, 'UTF-8');
+            $__advClKeep   = (array)($__advBClean['keep']   ?? array());
+            $__advClReview = (array)($__advBClean['review'] ?? array());
+            $__advClRetire = (array)($__advBClean['retire'] ?? array());
+        } else {
+            $__advClDate   = '';
+            $__advClKeep   = array();
+            $__advClReview = array();
+            $__advClRetire = array();
+        }
+    }
     ?>
-    <div class="mle-batch-cleanup" id="mle-evidence-panel-<?php echo $__advLid; ?>" style="margin-top:.75rem">
-      <div class="mle-batch-cleanup__title">Evidence Choices for This Lottery</div>
-      <p class="mle-batch-cleanup__body">LottoExpert reviewed the saved runs for this lottery and grouped them by how useful they are for future advice. These choices help keep your recommendations clean.</p>
-      <p class="mle-batch-cleanup__note">Removing from advice does not delete the prediction. It keeps the record but stops it from affecting future recommendations.</p>
-
-      <?php if (!empty($__advClKeep)): ?>
-      <div class="mle-batch-cleanup__section">
-        <div class="mle-batch-cleanup__section-heading mle-batch-cleanup__section-heading--keep">Recommended to keep (<?php echo count($__advClKeep); ?>)</div>
-        <?php foreach ($__advClKeep as $__advR):
-          $__advRMethod  = htmlspecialchars(mleAdvisoryMethodLabel($__advR['source'] ?? ''), ENT_QUOTES, 'UTF-8');
-          $__advRDate    = htmlspecialchars((string)($__advR['draw_date'] ?? ''), ENT_QUOTES, 'UTF-8');
-          $__advRLabel   = htmlspecialchars((string)($__advR['label'] ?? ''), ENT_QUOTES, 'UTF-8');
-          $__advRPred    = htmlspecialchars((string)($__advR['predicted'] ?? ''), ENT_QUOTES, 'UTF-8');
-          $__advRActual  = htmlspecialchars((string)($__advR['actual'] ?? ''), ENT_QUOTES, 'UTF-8');
-          $__advRResult  = htmlspecialchars((string)($__advR['result_summary'] ?? ''), ENT_QUOTES, 'UTF-8');
-          $__advRReason  = htmlspecialchars((string)($__advR['keep_reason'] ?? 'This was one of the strongest runs in this batch.'), ENT_QUOTES, 'UTF-8');
-        ?>
-        <div class="mle-batch-cleanup__run-detail mle-batch-cleanup__run-detail--keep">
-          <div class="mle-batch-cleanup__run-action">Recommended to keep</div>
-          <?php if ($__advRDate !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Draw date:</span> <?php echo $__advRDate; ?></div><?php endif; ?>
-          <div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Analysis:</span> <?php echo $__advRMethod; ?></div>
-          <?php if ($__advRLabel !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Recipe:</span> <?php echo $__advRLabel; ?></div><?php endif; ?>
-          <?php if ($__advRPred !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Prediction numbers:</span> <?php echo $__advRPred; ?></div><?php endif; ?>
-          <?php if ($__advRActual !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Actual draw numbers:</span> <?php echo $__advRActual; ?></div><?php endif; ?>
-          <?php if ($__advRResult !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Result:</span> <?php echo $__advRResult; ?></div><?php endif; ?>
-          <div class="mle-batch-cleanup__run-reason">Why keep it: <?php echo $__advRReason; ?></div>
+    <?php if ($__advShowEc): ?>
+    <div class="mle-adv-section-collapse" style="margin-top:.75rem">
+      <button type="button" class="mle-section-toggle" aria-expanded="false" aria-controls="<?php echo $__advEcBodyId; ?>">
+        <span>Show Evidence Choices for This Lottery</span>
+      </button>
+      <div id="<?php echo $__advEcBodyId; ?>" class="mle-section-body" style="display:none" aria-hidden="true">
+        <?php if ($__mleEcApplied > 0 && $__mleEcApplied === $__advLid): ?>
+        <div class="mle-batch-cleanup" id="mle-evidence-panel-<?php echo $__advLid; ?>" style="margin-top:.25rem">
+          <div class="mle-batch-cleanup__title">Evidence Choices for This Lottery</div>
+          <p class="mle-batch-cleanup__body" style="color:#15803d;font-weight:600">Evidence choices applied.</p>
+          <p class="mle-batch-cleanup__note">Your evidence choices have been saved. LottoExpert will use them when building future recommendations for this lottery.</p>
         </div>
-        <?php endforeach; ?>
-      </div>
-      <?php endif; ?>
+        <?php elseif (!empty($__advBClean)): ?>
+        <div class="mle-batch-cleanup" id="mle-evidence-panel-<?php echo $__advLid; ?>" style="margin-top:.25rem">
+          <div class="mle-batch-cleanup__title">Evidence Choices for This Lottery</div>
+          <p class="mle-batch-cleanup__body">LottoExpert reviewed the saved runs for this lottery and grouped them by how useful they are for future advice. These choices help keep your recommendations clean.</p>
+          <p class="mle-batch-cleanup__note">Removing from advice does not delete the prediction. It keeps the record but stops it from affecting future recommendations.</p>
 
-      <?php if (!empty($__advClReview)): ?>
-      <div class="mle-batch-cleanup__section">
-        <div class="mle-batch-cleanup__section-heading mle-batch-cleanup__section-heading--review">Needs more review (<?php echo count($__advClReview); ?>)</div>
-        <?php foreach ($__advClReview as $__advR):
-          $__advRMethod  = htmlspecialchars(mleAdvisoryMethodLabel($__advR['source'] ?? ''), ENT_QUOTES, 'UTF-8');
-          $__advRDate    = htmlspecialchars((string)($__advR['draw_date'] ?? ''), ENT_QUOTES, 'UTF-8');
-          $__advRLabel   = htmlspecialchars((string)($__advR['label'] ?? ''), ENT_QUOTES, 'UTF-8');
-          $__advRResult  = htmlspecialchars((string)($__advR['result_summary'] ?? ''), ENT_QUOTES, 'UTF-8');
-        ?>
-        <div class="mle-batch-cleanup__run-detail mle-batch-cleanup__run-detail--review">
-          <div class="mle-batch-cleanup__run-action">Needs more review</div>
-          <?php if ($__advRDate !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Draw date:</span> <?php echo $__advRDate; ?></div><?php endif; ?>
-          <div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Analysis:</span> <?php echo $__advRMethod; ?></div>
-          <?php if ($__advRLabel !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Recipe:</span> <?php echo $__advRLabel; ?></div><?php endif; ?>
-          <?php if ($__advRResult !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Result:</span> <?php echo $__advRResult; ?></div><?php endif; ?>
-          <div class="mle-batch-cleanup__run-reason">Why it needs more review: This run is in the middle range. It is not strong enough to keep outright, but not weak enough to remove yet. Watch it for another draw before deciding.</div>
+          <?php if (!empty($__advClKeep)): ?>
+          <div class="mle-batch-cleanup__section">
+            <div class="mle-batch-cleanup__section-heading mle-batch-cleanup__section-heading--keep">Recommended to keep (<?php echo count($__advClKeep); ?>)</div>
+            <?php foreach ($__advClKeep as $__advR):
+              $__advRMethod  = htmlspecialchars(mleAdvisoryMethodLabel($__advR['source'] ?? ''), ENT_QUOTES, 'UTF-8');
+              $__advRDate    = htmlspecialchars((string)($__advR['draw_date'] ?? ''), ENT_QUOTES, 'UTF-8');
+              $__advRLabel   = htmlspecialchars((string)($__advR['label'] ?? ''), ENT_QUOTES, 'UTF-8');
+              $__advRPred    = htmlspecialchars((string)($__advR['predicted'] ?? ''), ENT_QUOTES, 'UTF-8');
+              $__advRActual  = htmlspecialchars((string)($__advR['actual'] ?? ''), ENT_QUOTES, 'UTF-8');
+              $__advRResult  = htmlspecialchars((string)($__advR['result_summary'] ?? ''), ENT_QUOTES, 'UTF-8');
+              $__advRReason  = htmlspecialchars((string)($__advR['keep_reason'] ?? 'This was one of the strongest runs in this batch.'), ENT_QUOTES, 'UTF-8');
+            ?>
+            <div class="mle-batch-cleanup__run-detail mle-batch-cleanup__run-detail--keep">
+              <div class="mle-batch-cleanup__run-action">Recommended to keep</div>
+              <?php if ($__advRDate !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Draw date:</span> <?php echo $__advRDate; ?></div><?php endif; ?>
+              <div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Analysis:</span> <?php echo $__advRMethod; ?></div>
+              <?php if ($__advRLabel !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Recipe:</span> <?php echo $__advRLabel; ?></div><?php endif; ?>
+              <?php if ($__advRPred !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Prediction numbers:</span> <?php echo $__advRPred; ?></div><?php endif; ?>
+              <?php if ($__advRActual !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Actual draw numbers:</span> <?php echo $__advRActual; ?></div><?php endif; ?>
+              <?php if ($__advRResult !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Result:</span> <?php echo $__advRResult; ?></div><?php endif; ?>
+              <div class="mle-batch-cleanup__run-reason">Why keep it: <?php echo $__advRReason; ?></div>
+            </div>
+            <?php endforeach; ?>
+          </div>
+          <?php endif; ?>
+
+          <?php if (!empty($__advClReview)): ?>
+          <div class="mle-batch-cleanup__section">
+            <div class="mle-batch-cleanup__section-heading mle-batch-cleanup__section-heading--review">Needs more review (<?php echo count($__advClReview); ?>)</div>
+            <?php foreach ($__advClReview as $__advR):
+              $__advRMethod  = htmlspecialchars(mleAdvisoryMethodLabel($__advR['source'] ?? ''), ENT_QUOTES, 'UTF-8');
+              $__advRDate    = htmlspecialchars((string)($__advR['draw_date'] ?? ''), ENT_QUOTES, 'UTF-8');
+              $__advRLabel   = htmlspecialchars((string)($__advR['label'] ?? ''), ENT_QUOTES, 'UTF-8');
+              $__advRResult  = htmlspecialchars((string)($__advR['result_summary'] ?? ''), ENT_QUOTES, 'UTF-8');
+            ?>
+            <div class="mle-batch-cleanup__run-detail mle-batch-cleanup__run-detail--review">
+              <div class="mle-batch-cleanup__run-action">Needs more review</div>
+              <?php if ($__advRDate !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Draw date:</span> <?php echo $__advRDate; ?></div><?php endif; ?>
+              <div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Analysis:</span> <?php echo $__advRMethod; ?></div>
+              <?php if ($__advRLabel !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Recipe:</span> <?php echo $__advRLabel; ?></div><?php endif; ?>
+              <?php if ($__advRResult !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Result:</span> <?php echo $__advRResult; ?></div><?php endif; ?>
+              <div class="mle-batch-cleanup__run-reason">Why it needs more review: This run is in the middle range. It is not strong enough to keep outright, but not weak enough to remove yet. Watch it for another draw before deciding.</div>
+            </div>
+            <?php endforeach; ?>
+          </div>
+          <?php endif; ?>
+
+          <?php if (!empty($__advClRetire)): ?>
+          <div class="mle-batch-cleanup__section">
+            <div class="mle-batch-cleanup__section-heading mle-batch-cleanup__section-heading--retire">Recommended to remove (<?php echo count($__advClRetire); ?>)</div>
+            <?php foreach ($__advClRetire as $__advR):
+              $__advRMethod  = htmlspecialchars(mleAdvisoryMethodLabel($__advR['source'] ?? ''), ENT_QUOTES, 'UTF-8');
+              $__advRDate    = htmlspecialchars((string)($__advR['draw_date'] ?? ''), ENT_QUOTES, 'UTF-8');
+              $__advRLabel   = htmlspecialchars((string)($__advR['label'] ?? ''), ENT_QUOTES, 'UTF-8');
+              $__advRPred    = htmlspecialchars((string)($__advR['predicted'] ?? ''), ENT_QUOTES, 'UTF-8');
+              $__advRActual  = htmlspecialchars((string)($__advR['actual'] ?? ''), ENT_QUOTES, 'UTF-8');
+              $__advRResult  = htmlspecialchars((string)($__advR['result_summary'] ?? ''), ENT_QUOTES, 'UTF-8');
+            ?>
+            <div class="mle-batch-cleanup__run-detail mle-batch-cleanup__run-detail--retire">
+              <div class="mle-batch-cleanup__run-action">Recommended to remove</div>
+              <?php if ($__advRDate !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Draw date:</span> <?php echo $__advRDate; ?></div><?php endif; ?>
+              <div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Analysis:</span> <?php echo $__advRMethod; ?></div>
+              <?php if ($__advRLabel !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Recipe:</span> <?php echo $__advRLabel; ?></div><?php endif; ?>
+              <?php if ($__advRPred !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Prediction numbers:</span> <?php echo $__advRPred; ?></div><?php endif; ?>
+              <?php if ($__advRActual !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Actual draw numbers:</span> <?php echo $__advRActual; ?></div><?php endif; ?>
+              <?php if ($__advRResult !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Result:</span> <?php echo $__advRResult; ?></div><?php endif; ?>
+              <div class="mle-batch-cleanup__run-reason">Why remove it: This run was weaker than the top runs in the same draw. Removing from advice does not delete the prediction. It keeps the record but stops it from affecting future recommendations.</div>
+            </div>
+            <?php endforeach; ?>
+          </div>
+          <?php endif; ?>
+
+          <?php if (!MLE_DEMO_MODE): ?>
+          <p class="mle-batch-cleanup__note" style="margin-top:.5rem">"Use These Evidence Choices" will mark the recommended runs as active, place runs that need more review on Watch, and remove weaker evidence from future advice. It will not delete your saved history.</p>
+          <form method="post" class="mle-advisory-actions" style="margin-top:.75rem">
+            <input type="hidden" name="mle_action"  value="apply_evidence_choices">
+            <input type="hidden" name="lottery_id"  value="<?php echo $__advLid; ?>">
+            <input type="hidden" name="draw_date"   value="<?php echo $__advClDate; ?>">
+            <?php foreach ($__advClKeep   as $__advR): ?><input type="hidden" name="keep_ids[]"   value="<?php echo (int)($__advR['id'] ?? 0); ?>"><?php endforeach; ?>
+            <?php foreach ($__advClReview as $__advR): ?><input type="hidden" name="watch_ids[]"  value="<?php echo (int)($__advR['id'] ?? 0); ?>"><?php endforeach; ?>
+            <?php foreach ($__advClRetire as $__advR): ?><input type="hidden" name="retire_ids[]" value="<?php echo (int)($__advR['id'] ?? 0); ?>"><?php endforeach; ?>
+            <?php echo \Joomla\CMS\HTML\HTMLHelper::_('form.token'); ?>
+            <button type="submit" class="mle-advisory-btn mle-advisory-btn--primary">Use These Evidence Choices</button>
+            <button type="button" class="mle-advisory-btn mle-advisory-btn--secondary mle-review-runs-btn" data-target-panel="<?php echo $__advSPBodyId; ?>">Review Runs</button>
+            <button type="button" class="mle-advisory-btn mle-advisory-btn--ghost mle-leave-as-is-btn" data-target-panel="mle-evidence-panel-<?php echo $__advLid; ?>">Leave as is</button>
+          </form>
+          <?php endif; ?>
         </div>
-        <?php endforeach; ?>
+        <?php endif; ?>
       </div>
-      <?php endif; ?>
-
-      <?php if (!empty($__advClRetire)): ?>
-      <div class="mle-batch-cleanup__section">
-        <div class="mle-batch-cleanup__section-heading mle-batch-cleanup__section-heading--retire">Recommended to remove (<?php echo count($__advClRetire); ?>)</div>
-        <?php foreach ($__advClRetire as $__advR):
-          $__advRMethod  = htmlspecialchars(mleAdvisoryMethodLabel($__advR['source'] ?? ''), ENT_QUOTES, 'UTF-8');
-          $__advRDate    = htmlspecialchars((string)($__advR['draw_date'] ?? ''), ENT_QUOTES, 'UTF-8');
-          $__advRLabel   = htmlspecialchars((string)($__advR['label'] ?? ''), ENT_QUOTES, 'UTF-8');
-          $__advRPred    = htmlspecialchars((string)($__advR['predicted'] ?? ''), ENT_QUOTES, 'UTF-8');
-          $__advRActual  = htmlspecialchars((string)($__advR['actual'] ?? ''), ENT_QUOTES, 'UTF-8');
-          $__advRResult  = htmlspecialchars((string)($__advR['result_summary'] ?? ''), ENT_QUOTES, 'UTF-8');
-        ?>
-        <div class="mle-batch-cleanup__run-detail mle-batch-cleanup__run-detail--retire">
-          <div class="mle-batch-cleanup__run-action">Recommended to remove</div>
-          <?php if ($__advRDate !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Draw date:</span> <?php echo $__advRDate; ?></div><?php endif; ?>
-          <div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Analysis:</span> <?php echo $__advRMethod; ?></div>
-          <?php if ($__advRLabel !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Recipe:</span> <?php echo $__advRLabel; ?></div><?php endif; ?>
-          <?php if ($__advRPred !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Prediction numbers:</span> <?php echo $__advRPred; ?></div><?php endif; ?>
-          <?php if ($__advRActual !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Actual draw numbers:</span> <?php echo $__advRActual; ?></div><?php endif; ?>
-          <?php if ($__advRResult !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Result:</span> <?php echo $__advRResult; ?></div><?php endif; ?>
-          <div class="mle-batch-cleanup__run-reason">Why remove it: This run was weaker than the top runs in the same draw. Removing from advice does not delete the prediction. It keeps the record but stops it from affecting future recommendations.</div>
-        </div>
-        <?php endforeach; ?>
-      </div>
-      <?php endif; ?>
-
-      <?php if (!MLE_DEMO_MODE): ?>
-      <p class="mle-batch-cleanup__note" style="margin-top:.5rem">"Use These Evidence Choices" will mark the recommended runs as active, place runs that need more review on Watch, and remove weaker evidence from future advice. It will not delete your saved history.</p>
-      <form method="post" class="mle-advisory-actions" style="margin-top:.75rem">
-        <input type="hidden" name="mle_action"  value="apply_evidence_choices">
-        <input type="hidden" name="lottery_id"  value="<?php echo $__advLid; ?>">
-        <input type="hidden" name="draw_date"   value="<?php echo $__advClDate; ?>">
-        <?php foreach ($__advClKeep   as $__advR): ?><input type="hidden" name="keep_ids[]"   value="<?php echo (int)($__advR['id'] ?? 0); ?>"><?php endforeach; ?>
-        <?php foreach ($__advClReview as $__advR): ?><input type="hidden" name="watch_ids[]"  value="<?php echo (int)($__advR['id'] ?? 0); ?>"><?php endforeach; ?>
-        <?php foreach ($__advClRetire as $__advR): ?><input type="hidden" name="retire_ids[]" value="<?php echo (int)($__advR['id'] ?? 0); ?>"><?php endforeach; ?>
-        <?php echo \Joomla\CMS\HTML\HTMLHelper::_('form.token'); ?>
-        <button type="submit" class="mle-advisory-btn mle-advisory-btn--primary">Use These Evidence Choices</button>
-        <button type="button" class="mle-advisory-btn mle-advisory-btn--secondary mle-review-runs-btn" data-target-panel="<?php echo $__advSPBodyId; ?>">Review Runs</button>
-        <button type="button" class="mle-advisory-btn mle-advisory-btn--ghost mle-leave-as-is-btn" data-target-panel="mle-evidence-panel-<?php echo $__advLid; ?>">Leave as is</button>
-      </form>
-      <?php endif; ?>
     </div>
     <?php endif; ?>
 
@@ -13043,6 +13072,23 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
     }
     if (btn.classList.contains('mle-review-runs-btn')) { mleAdvReviewRuns(btn); }
     if (btn.classList.contains('mle-leave-as-is-btn')) { mleAdvLeaveAsIs(btn); }
+    if (btn.classList.contains('mle-advanced-toggle-btn')) {
+      var wrap = btn.parentNode;
+      while (wrap && wrap !== document.body) {
+        if (wrap.classList && wrap.classList.contains('mle-advanced-toggle-wrap')) { break; }
+        wrap = wrap.parentNode;
+      }
+      if (wrap && wrap.classList && wrap.classList.contains('mle-advanced-toggle-wrap')) {
+        var wasOpen = wrap.classList.contains('is-open');
+        if (wasOpen) {
+          wrap.classList.remove('is-open');
+          btn.setAttribute('aria-expanded', 'false');
+        } else {
+          wrap.classList.add('is-open');
+          btn.setAttribute('aria-expanded', 'true');
+        }
+      }
+    }
   });
 }());
 </script>
