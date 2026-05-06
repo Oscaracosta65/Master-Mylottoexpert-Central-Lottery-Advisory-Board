@@ -5217,7 +5217,7 @@ if ($__mleAction === 'save_advisory_recipe') {
         $db->setQuery($insertQ);
         $db->execute();
         if (!empty($__advSettingKey)) {
-            $confirmMsg = 'Recommended settings run created. LottoExpert copied the full base settings and changed only ' . $__advSettingLabel . ' from ' . $__advOldValue . ' to ' . $__advNewValue . '.';
+            $confirmMsg = 'Recommended next settings run created. LottoExpert copied your strongest current settings and changed only ' . $__advSettingLabel . ' from ' . $__advOldValue . ' to ' . $__advNewValue . '.';
         } else {
             $confirmMsg = 'Recommended settings run created for ' . $__advMethodLabel . '.';
         }
@@ -8148,6 +8148,7 @@ html[data-mle-mode="beginner"] .mle-standard-only,html[data-mle-mode="beginner"]
 html[data-mle-mode="beginner"] .mle-quick-nav__advanced,
 html[data-mle-mode="beginner"] .mle-standard-only,
 html[data-mle-mode="beginner"] .mle-advanced-only{display:none !important;}
+html[data-mle-mode="beginner"] .mle-adv-ec-section-wrap{display:none !important;}
 html[data-mle-mode="standard"] .mle-quick-nav__advanced{display:none !important;}
 @media (max-width:640px){.mle-mode-switch__actions{width:100%;}.mle-mode-switch__btn{flex:1 1 100%;}}
 
@@ -12414,7 +12415,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
   $__advKeepSame     = htmlspecialchars((string)($__advSAdv['keep_same_list']   ?? ''), ENT_QUOTES, 'UTF-8');
   $__advTopMKey      = strtolower((string)($__advTopM['method'] ?? 'skai'));
   $__advTopMLabel    = htmlspecialchars(mleAdvisoryMethodLabel($__advTopMKey), ENT_QUOTES, 'UTF-8');
-  $__advBtnLabel     = 'Create Recommended Settings Run';
+  $__advBtnLabel     = 'Create Recommended Next Settings Run';
   $__advBtnClass     = 'mle-advisory-btn--primary';
   if ($__advTopMKey === 'skai' || $__advTopMKey === 'skai_prediction' || $__advTopMKey === 'skai_blend') { $__advBtnClass = 'mle-advisory-btn--skai'; }
   elseif ($__advTopMKey === 'ai'   || $__advTopMKey === 'ai_prediction')                                { $__advBtnClass = 'mle-advisory-btn--ai'; }
@@ -12556,6 +12557,18 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
       <?php endif; ?>
     </div>
 
+    <!-- Optimization Focus -->
+    <div class="mle-adv-optfocus" style="margin-top:.75rem;padding:.85rem 1rem;background:#f0f4ff;border:1px solid #c7d7f5;border-radius:.625rem">
+      <div class="mle-adv-optfocus__title" style="font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#1d4ed8;margin-bottom:.35rem">Optimization Focus</div>
+      <p class="mle-adv-optfocus__desc" style="font-size:.83rem;color:#334155;margin:0 0 .5rem;line-height:1.5">LottoExpert is using your active saved runs and completed draw results to narrow toward the most consistent settings for this lottery.</p>
+      <div class="mle-adv-optfocus__grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.4rem .75rem;font-size:.82rem">
+        <div><span style="font-weight:700;color:#64748b">Best direction:</span> <strong><?php echo $__advTopMLabel; ?></strong></div>
+        <?php if ($__advBestRecipe !== ''): ?><div><span style="font-weight:700;color:#64748b">Best settings profile so far:</span> <?php echo $__advBestRecipe; ?></div><?php endif; ?>
+        <?php if ($__advTryNextMain !== ''): ?><div><span style="font-weight:700;color:#64748b">Next test:</span> <?php echo $__advTryNextMain; ?></div><?php endif; ?>
+        <?php if ($__advWhy !== ''): ?><div><span style="font-weight:700;color:#64748b">Why this test matters:</span> <?php echo $__advWhy; ?></div><?php endif; ?>
+      </div>
+    </div>
+
     <!-- 8. Saved Prediction Summary -->
     <div class="mle-adv-pred-summary" style="margin-top:.75rem">
       <div class="mle-adv-pred-summary__title">Saved Prediction Summary</div>
@@ -12596,7 +12609,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
       <?php endif; ?>
     </div>
 
-    <!-- 9. Evidence Choices for This Lottery (batch cleanup) -->
+    <!-- 9. Run Selection for Better Advice -->
     <?php
     $__advEcBodyId  = 'mle-adv-ec-' . $__advLid;
     $__advShowEc    = !empty($__advBClean) || ($__mleEcApplied > 0 && $__mleEcApplied === $__advLid);
@@ -12615,21 +12628,27 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
     }
     ?>
     <?php if ($__advShowEc): ?>
-    <div class="mle-adv-section-collapse" style="margin-top:.75rem">
-      <button type="button" class="mle-section-toggle" aria-expanded="false" aria-controls="<?php echo $__advEcBodyId; ?>">
-        <span>Show Evidence Choices for This Lottery</span>
+    <?php $__advEcAppliedHere = ($__mleEcApplied > 0 && $__mleEcApplied === $__advLid); ?>
+    <div class="mle-adv-section-collapse mle-adv-ec-section-wrap" style="margin-top:.75rem">
+      <button type="button" class="mle-section-toggle" aria-expanded="<?php echo $__advEcAppliedHere ? 'true' : 'false'; ?>" aria-controls="<?php echo $__advEcBodyId; ?>">
+        <span><?php echo $__advEcAppliedHere ? 'Hide Run Selection for Better Advice' : 'Show Run Selection for Better Advice'; ?></span>
       </button>
-      <div id="<?php echo $__advEcBodyId; ?>" class="mle-section-body" style="display:none" aria-hidden="true">
+      <div id="<?php echo $__advEcBodyId; ?>" class="mle-section-body" style="<?php echo $__advEcAppliedHere ? 'display:block' : 'display:none'; ?>" aria-hidden="<?php echo $__advEcAppliedHere ? 'false' : 'true'; ?>">
         <?php if ($__mleEcApplied > 0 && $__mleEcApplied === $__advLid): ?>
-        <div class="mle-batch-cleanup" id="mle-evidence-panel-<?php echo $__advLid; ?>" style="margin-top:.25rem">
-          <div class="mle-batch-cleanup__title">Evidence Choices for This Lottery</div>
+        <div class="mle-batch-cleanup mle-batch-cleanup--applied" id="mle-evidence-panel-<?php echo $__advLid; ?>" style="margin-top:.25rem">
+          <div class="mle-batch-cleanup__title">Run Selection for Better Advice</div>
           <p class="mle-batch-cleanup__body" style="color:#15803d;font-weight:600">Evidence choices applied.</p>
-          <p class="mle-batch-cleanup__note">Your evidence choices have been saved. LottoExpert will use them when building future recommendations for this lottery.</p>
+          <div class="mle-batch-cleanup__applied-summary" style="margin:.5rem 0;padding:.6rem .75rem;background:#f0fdf4;border:1px solid #a7f3d0;border-radius:.375rem;font-size:.82rem">
+            <div style="margin-bottom:.25rem"><strong>Recommended to keep:</strong> <?php echo count($__advClKeep); ?></div>
+            <div style="margin-bottom:.25rem"><strong>Needs more review:</strong> <?php echo count($__advClReview); ?></div>
+            <div><strong>Removed from advice:</strong> <?php echo count($__advClRetire); ?></div>
+          </div>
+          <p class="mle-batch-cleanup__note">These choices will now be used when LottoExpert builds future recommendations for this lottery.</p>
         </div>
         <?php elseif (!empty($__advBClean)): ?>
         <div class="mle-batch-cleanup" id="mle-evidence-panel-<?php echo $__advLid; ?>" style="margin-top:.25rem">
-          <div class="mle-batch-cleanup__title">Evidence Choices for This Lottery</div>
-          <p class="mle-batch-cleanup__body">LottoExpert reviewed the saved runs for this lottery and grouped them by how useful they are for future advice. These choices help keep your recommendations clean.</p>
+          <div class="mle-batch-cleanup__title">Run Selection for Better Advice</div>
+          <p class="mle-batch-cleanup__body">LottoExpert reviewed your saved runs and recommends which ones should guide future advice. Keeping stronger runs and removing weaker ones helps narrow toward the most consistent setup.</p>
           <p class="mle-batch-cleanup__note">Removing from advice does not delete the prediction. It keeps the record but stops it from affecting future recommendations.</p>
 
           <?php if (!empty($__advClKeep)): ?>
@@ -12645,7 +12664,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
               $__advRReason  = htmlspecialchars((string)($__advR['keep_reason'] ?? 'This was one of the strongest runs in this batch.'), ENT_QUOTES, 'UTF-8');
             ?>
             <div class="mle-batch-cleanup__run-detail mle-batch-cleanup__run-detail--keep">
-              <div class="mle-batch-cleanup__run-action">Recommended to keep</div>
+              <div class="mle-batch-cleanup__run-action">Use for future advice</div>
               <?php if ($__advRDate !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Draw date:</span> <?php echo $__advRDate; ?></div><?php endif; ?>
               <div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Analysis:</span> <?php echo $__advRMethod; ?></div>
               <?php if ($__advRLabel !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Recipe:</span> <?php echo $__advRLabel; ?></div><?php endif; ?>
@@ -12668,7 +12687,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
               $__advRResult  = htmlspecialchars((string)($__advR['result_summary'] ?? ''), ENT_QUOTES, 'UTF-8');
             ?>
             <div class="mle-batch-cleanup__run-detail mle-batch-cleanup__run-detail--review">
-              <div class="mle-batch-cleanup__run-action">Needs more review</div>
+              <div class="mle-batch-cleanup__run-action">Keep for review</div>
               <?php if ($__advRDate !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Draw date:</span> <?php echo $__advRDate; ?></div><?php endif; ?>
               <div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Analysis:</span> <?php echo $__advRMethod; ?></div>
               <?php if ($__advRLabel !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Recipe:</span> <?php echo $__advRLabel; ?></div><?php endif; ?>
@@ -12691,7 +12710,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
               $__advRResult  = htmlspecialchars((string)($__advR['result_summary'] ?? ''), ENT_QUOTES, 'UTF-8');
             ?>
             <div class="mle-batch-cleanup__run-detail mle-batch-cleanup__run-detail--retire">
-              <div class="mle-batch-cleanup__run-action">Recommended to remove</div>
+              <div class="mle-batch-cleanup__run-action">Do not use for advice</div>
               <?php if ($__advRDate !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Draw date:</span> <?php echo $__advRDate; ?></div><?php endif; ?>
               <div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Analysis:</span> <?php echo $__advRMethod; ?></div>
               <?php if ($__advRLabel !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Recipe:</span> <?php echo $__advRLabel; ?></div><?php endif; ?>
@@ -12714,7 +12733,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
             <?php foreach ($__advClReview as $__advR): ?><input type="hidden" name="watch_ids[]"  value="<?php echo (int)($__advR['id'] ?? 0); ?>"><?php endforeach; ?>
             <?php foreach ($__advClRetire as $__advR): ?><input type="hidden" name="retire_ids[]" value="<?php echo (int)($__advR['id'] ?? 0); ?>"><?php endforeach; ?>
             <?php echo \Joomla\CMS\HTML\HTMLHelper::_('form.token'); ?>
-            <button type="submit" class="mle-advisory-btn mle-advisory-btn--primary">Use These Evidence Choices</button>
+            <button type="submit" class="mle-advisory-btn mle-advisory-btn--primary">Apply Run Selection</button>
             <button type="button" class="mle-advisory-btn mle-advisory-btn--secondary mle-review-runs-btn" data-target-panel="<?php echo $__advSPBodyId; ?>">Review Runs</button>
             <button type="button" class="mle-advisory-btn mle-advisory-btn--ghost mle-leave-as-is-btn" data-target-panel="mle-evidence-panel-<?php echo $__advLid; ?>">Leave as is</button>
           </form>
@@ -12728,7 +12747,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
     <!-- 10. Recommended Settings Test (advisory recipe) -->
     <?php if (!MLE_DEMO_MODE): ?>
     <div class="mle-adv-cta-panel" style="margin-top:.75rem">
-      <div class="mle-adv-cta-panel__title" style="font-weight:600;margin-bottom:.35rem">Recommended Settings Test</div>
+      <div class="mle-adv-cta-panel__title" style="font-weight:600;margin-bottom:.35rem">Recommended Next Settings Run</div>
       <p class="mle-adv-cta-panel__desc">LottoExpert will copy your best current settings, change only the recommended setting, and save it as a new settings run you can test next.</p>
       <form method="post" class="mle-advisory-actions">
         <input type="hidden" name="mle_action"              value="save_advisory_recipe">
@@ -12923,10 +12942,10 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
 
     <!-- 13. Advanced details (proof history) -->
     <div class="mle-adv-section-collapse" style="margin-top:.75rem">
-      <button type="button" class="mle-section-toggle" aria-expanded="false" aria-controls="mle-adv-proof-<?php echo $__advLid; ?>">
-        <span>Show Advanced Details (<?php echo $__advTotalDraws; ?> completed draws, <?php echo $__advTotalRuns; ?> runs)</span>
+      <button type="button" class="mle-section-toggle" aria-expanded="false" aria-controls="mle-adv-analysis-<?php echo $__advLid; ?>">
+        <span>Show Advanced Analysis (<?php echo $__advTotalDraws; ?> completed draws, <?php echo $__advTotalRuns; ?> runs)</span>
       </button>
-      <div id="mle-adv-proof-<?php echo $__advLid; ?>" class="mle-adv-proof-history__body" style="display:none;margin-top:.5rem" aria-hidden="true">
+      <div id="mle-adv-analysis-<?php echo $__advLid; ?>" class="mle-adv-proof-history__body" style="display:none;margin-top:.5rem" aria-hidden="true">
         <p style="font-size:.8rem;color:#64748b;margin:0 0 .5rem">Draw-by-draw results are listed here for reference only. These numbers do not change your advice. They are the evidence behind it.</p>
         <table class="mle-adv-proof-table mle-advanced-only" aria-label="Proof history for <?php echo $__advLname; ?>">
           <thead>
@@ -16915,13 +16934,11 @@ foreach ($bestOpps as $__sopp) {
 
     <button
       type="button"
-      class="mle-advanced-toggle-btn"
+      class="mle-advanced-toggle-btn mle-section-toggle"
       id="mle-advanced-toggle-btn"
       aria-expanded="false"
       aria-controls="mle-advanced-toggle-panel">
-      
-      <span class="mle-advanced-toggle-btn-text--closed">Show Advanced Analysis</span>
-      <span class="mle-advanced-toggle-btn-text--open">Hide Advanced Analysis</span>
+      <span>Show Advanced Analysis</span>
     </button>
   </div>
 
@@ -16936,7 +16953,7 @@ foreach ($bestOpps as $__sopp) {
     </div>
   </div>
 
-  <div class="mle-advanced-toggle-panel" id="mle-advanced-toggle-panel">
+  <div class="mle-advanced-toggle-panel" id="mle-advanced-toggle-panel" style="display:none" aria-hidden="true">
     <div id="skai-global-snapshot" class="skai-global-snapshot" aria-label="Best settings snapshot" role="region">
   <div class="skai-bss-header">
     <h2 class="skai-bss-title">Your Best Performing Setups</h2>
