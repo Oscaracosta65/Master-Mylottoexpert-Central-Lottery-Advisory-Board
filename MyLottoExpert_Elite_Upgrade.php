@@ -5422,7 +5422,7 @@ if ($__mleAction === 'apply_evidence_choices') {
             echo json_encode(array('ok' => true, 'updated' => $updated, 'keep' => count($__advKeepIds), 'watch' => count($__advWatchIds), 'retire' => count($__advRetireIds)));
             exit;
         }
-        $app->enqueueMessage('Evidence choices applied. ' . $updated . ' runs updated.', 'message');
+        $app->enqueueMessage('Run selection applied. ' . $updated . ' runs updated.', 'message');
     } else {
         if ($__ecIsAjax) { $app->setHeader('Content-Type', 'application/json; charset=utf-8', true); echo json_encode(array('ok' => false, 'error' => 'No evidence choices were changed. LottoExpert could not match the submitted evidence rows to active saved runs.')); exit; }
         $app->enqueueMessage('No evidence choices were changed. LottoExpert could not match the submitted evidence rows to active saved runs.', 'notice');
@@ -12663,9 +12663,9 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
         <?php if ($__advBestRecipe !== ''): ?>
         <div class="mle-adv-pred-summary__item"><span class="mle-adv-pred-summary__label">Best recipe so far</span><span class="mle-adv-pred-summary__value"><?php echo $__advBestRecipe; ?></span></div>
         <?php endif; ?>
-        <div class="mle-adv-pred-summary__item"><span class="mle-adv-pred-summary__label">Recommended to keep</span><span class="mle-adv-pred-summary__value mle-adv-pred-summary__value--keep"><?php echo $__advPSKeep; ?></span></div>
-        <div class="mle-adv-pred-summary__item"><span class="mle-adv-pred-summary__label">Needs more review</span><span class="mle-adv-pred-summary__value mle-adv-pred-summary__value--watch"><?php echo $__advPSWatch; ?></span></div>
-        <div class="mle-adv-pred-summary__item"><span class="mle-adv-pred-summary__label">Recommended to remove</span><span class="mle-adv-pred-summary__value mle-adv-pred-summary__value--retire"><?php echo $__advPSRetire; ?></span></div>
+        <div class="mle-adv-pred-summary__item"><span class="mle-adv-pred-summary__label">Used for future advice</span><span class="mle-adv-pred-summary__value mle-adv-pred-summary__value--keep"><?php echo $__advPSKeep; ?></span></div>
+        <div class="mle-adv-pred-summary__item"><span class="mle-adv-pred-summary__label">Kept for review</span><span class="mle-adv-pred-summary__value mle-adv-pred-summary__value--watch"><?php echo $__advPSWatch; ?></span></div>
+        <div class="mle-adv-pred-summary__item"><span class="mle-adv-pred-summary__label">Not used for advice</span><span class="mle-adv-pred-summary__value mle-adv-pred-summary__value--retire"><?php echo $__advPSRetire; ?></span></div>
       </div>
       <?php if ($__advPSReason !== ''): ?>
       <p class="mle-adv-pred-summary__reason"><?php echo $__advPSReason; ?></p>
@@ -12680,7 +12680,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
           $__psrDate   = htmlspecialchars((string)($__advPSRun['date_saved'] ?? ''), ENT_QUOTES, 'UTF-8');
           $__psrStatus = (string)($__advPSRun['status']    ?? 'active');
           $__psrStatusCss = ($__psrStatus === 'keep') ? 'mle-adv-run-item--keep' : (($__psrStatus === 'watch') ? 'mle-adv-run-item--watch' : (($__psrStatus === 'retired') ? 'mle-adv-run-item--retire' : ''));
-          $__psrStatusLabel = ($__psrStatus === 'keep') ? 'Recommended to keep' : (($__psrStatus === 'watch') ? 'Needs more review' : (($__psrStatus === 'retired') ? 'Recommended to remove' : 'Active'));
+          $__psrStatusLabel = ($__psrStatus === 'keep') ? 'Used for future advice' : (($__psrStatus === 'watch') ? 'Kept for review' : (($__psrStatus === 'retired') ? 'Not used for advice' : 'Active'));
         ?>
         <div class="mle-adv-run-item <?php echo $__psrStatusCss; ?>">
           <span class="mle-adv-run-item__name"><?php echo $__psrLabel; ?></span>
@@ -12721,13 +12721,13 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
         <?php if ($__mleEcApplied > 0 && $__mleEcApplied === $__advLid): ?>
         <div class="mle-batch-cleanup mle-batch-cleanup--applied" id="mle-evidence-panel-<?php echo $__advLid; ?>" style="margin-top:.25rem">
           <div class="mle-batch-cleanup__title">Run Selection for Better Advice</div>
-          <p class="mle-batch-cleanup__body" style="color:#15803d;font-weight:600">Evidence choices applied.</p>
+          <p class="mle-batch-cleanup__body" style="color:#15803d;font-weight:600">Run selection applied.</p>
           <div class="mle-batch-cleanup__applied-summary" style="margin:.5rem 0;padding:.6rem .75rem;background:#f0fdf4;border:1px solid #a7f3d0;border-radius:.375rem;font-size:.82rem">
-            <div style="margin-bottom:.25rem"><strong>Recommended to keep:</strong> <?php echo count($__advClKeep); ?></div>
-            <div style="margin-bottom:.25rem"><strong>Needs more review:</strong> <?php echo count($__advClReview); ?></div>
+            <div style="margin-bottom:.25rem"><strong>Used for future advice:</strong> <?php echo count($__advClKeep); ?></div>
+            <div style="margin-bottom:.25rem"><strong>Kept for review:</strong> <?php echo count($__advClReview); ?></div>
             <div><strong>Removed from advice:</strong> <?php echo count($__advClRetire); ?></div>
           </div>
-          <p class="mle-batch-cleanup__note">These choices will now be used when LottoExpert builds future recommendations for this lottery.</p>
+          <p class="mle-batch-cleanup__note">These choices will now shape future recommendations for this lottery.</p>
         </div>
         <?php elseif (!empty($__advBClean)): ?>
         <div class="mle-batch-cleanup" id="mle-evidence-panel-<?php echo $__advLid; ?>" style="margin-top:.25rem">
@@ -12737,7 +12737,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
 
           <?php if (!empty($__advClKeep)): ?>
           <div class="mle-batch-cleanup__section">
-            <div class="mle-batch-cleanup__section-heading mle-batch-cleanup__section-heading--keep">Recommended to keep (<?php echo count($__advClKeep); ?>)</div>
+            <div class="mle-batch-cleanup__section-heading mle-batch-cleanup__section-heading--keep">Use for future advice (<?php echo count($__advClKeep); ?>)</div>
             <?php foreach ($__advClKeep as $__advR):
               $__advRMethod  = htmlspecialchars(mleAdvisoryMethodLabel($__advR['source'] ?? ''), ENT_QUOTES, 'UTF-8');
               $__advRDate    = htmlspecialchars((string)($__advR['draw_date'] ?? ''), ENT_QUOTES, 'UTF-8');
@@ -12763,7 +12763,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
 
           <?php if (!empty($__advClReview)): ?>
           <div class="mle-batch-cleanup__section">
-            <div class="mle-batch-cleanup__section-heading mle-batch-cleanup__section-heading--review">Needs more review (<?php echo count($__advClReview); ?>)</div>
+            <div class="mle-batch-cleanup__section-heading mle-batch-cleanup__section-heading--review">Keep for review (<?php echo count($__advClReview); ?>)</div>
             <?php foreach ($__advClReview as $__advR):
               $__advRMethod  = htmlspecialchars(mleAdvisoryMethodLabel($__advR['source'] ?? ''), ENT_QUOTES, 'UTF-8');
               $__advRDate    = htmlspecialchars((string)($__advR['draw_date'] ?? ''), ENT_QUOTES, 'UTF-8');
@@ -12776,7 +12776,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
               <div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Analysis:</span> <?php echo $__advRMethod; ?></div>
               <?php if ($__advRLabel !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Recipe:</span> <?php echo $__advRLabel; ?></div><?php endif; ?>
               <?php if ($__advRResult !== ''): ?><div class="mle-batch-cleanup__run-row"><span class="mle-batch-cleanup__run-label">Result:</span> <?php echo $__advRResult; ?></div><?php endif; ?>
-              <div class="mle-batch-cleanup__run-reason">Why it needs more review: This run is in the middle range. It is not strong enough to keep outright, but not weak enough to remove yet. Watch it for another draw before deciding.</div>
+              <div class="mle-batch-cleanup__run-reason">Why keep for review: This run is in the middle range. It is not strong enough to use for advice outright, but not weak enough to remove yet. Watch it for another draw before deciding.</div>
             </div>
             <?php endforeach; ?>
           </div>
@@ -12784,7 +12784,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
 
           <?php if (!empty($__advClRetire)): ?>
           <div class="mle-batch-cleanup__section">
-            <div class="mle-batch-cleanup__section-heading mle-batch-cleanup__section-heading--retire">Recommended to remove (<?php echo count($__advClRetire); ?>)</div>
+            <div class="mle-batch-cleanup__section-heading mle-batch-cleanup__section-heading--retire">Do not use for advice (<?php echo count($__advClRetire); ?>)</div>
             <?php foreach ($__advClRetire as $__advR):
               $__advRMethod  = htmlspecialchars(mleAdvisoryMethodLabel($__advR['source'] ?? ''), ENT_QUOTES, 'UTF-8');
               $__advRDate    = htmlspecialchars((string)($__advR['draw_date'] ?? ''), ENT_QUOTES, 'UTF-8');
@@ -13074,7 +13074,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
           $__spDate   = htmlspecialchars((string)($__spRun['date_saved'] ?? ''), ENT_QUOTES, 'UTF-8');
           $__spStatus = (string)($__spRun['status'] ?? 'active');
           $__spStatusCss   = ($__spStatus === 'keep') ? 'mle-adv-run-item--keep' : (($__spStatus === 'watch') ? 'mle-adv-run-item--watch' : (($__spStatus === 'retired') ? 'mle-adv-run-item--retire' : ''));
-          $__spStatusLabel = ($__spStatus === 'keep') ? 'Recommended to keep' : (($__spStatus === 'watch') ? 'Needs more review' : (($__spStatus === 'retired') ? 'Recommended to remove' : 'Active'));
+          $__spStatusLabel = ($__spStatus === 'keep') ? 'Used for future advice' : (($__spStatus === 'watch') ? 'Kept for review' : (($__spStatus === 'retired') ? 'Not used for advice' : 'Active'));
         ?>
         <div class="mle-adv-run-item <?php echo $__spStatusCss; ?>">
           <span class="mle-adv-run-item__name"><?php echo $__spLabel; ?></span>
@@ -13346,9 +13346,9 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
     mleSendXhr(window.location.href, data, function(parsed, resp) {
       if (btn) { btn.disabled = false; btn.textContent = 'Apply Selection'; }
       if (parsed && resp && resp.ok) {
-        var usedC    = parseInt(resp.used_count    || 0, 10);
-        var watchC   = parseInt(resp.watch_count   || 0, 10);
-        var retiredC = parseInt(resp.retired_count || 0, 10);
+        var usedC    = parseInt(resp.keep   || resp.used_count    || 0, 10);
+        var watchC   = parseInt(resp.watch  || resp.watch_count   || 0, 10);
+        var retiredC = parseInt(resp.retire || resp.retired_count || 0, 10);
         var html  = '<strong>Run selection applied.</strong><br>';
         html += 'Used for future advice: ' + usedC + ' ';
         html += '/ Kept for review: ' + watchC + ' ';
