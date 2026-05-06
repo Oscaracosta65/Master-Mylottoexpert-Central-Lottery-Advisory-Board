@@ -4045,18 +4045,14 @@ function mleAdvisoryLoadPerLotteryDrawResults($db, $userId, $lotteryId, array $r
         $rows = $db->loadAssocList() ?: array();
     } catch (\Throwable $e) { return array(); }
 
-    // Group by draw_date, track best run per date
+    // Group by draw_date; compute ball arrays and hits first, then determine best run
     $grouped = array();
     foreach ($rows as $row) {
         $date = (string)($row['draw_date'] ?? '');
         if ($date === '' || $date === '0000-00-00') { $date = 'Unknown date'; }
         if (!isset($grouped[$date])) {
-            $grouped[$date] = array('date' => $date, 'runs' => array(), 'best_run_id' => 0, 'best_rank' => PHP_INT_MAX);
-        }
-        $rank = (float)($row['avg_winning_rank'] ?? PHP_INT_MAX);
-        if ($rank < $grouped[$date]['best_rank']) {
-            $grouped[$date]['best_rank']   = $rank;
-            $grouped[$date]['best_run_id'] = (int)($row['run_id'] ?? 0);
+            $grouped[$date] = array('date' => $date, 'runs' => array(), 'best_run_id' => 0,
+                                    'best_hits' => -1, 'best_rank' => PHP_INT_MAX);
         }
         // Parse number strings into arrays for ball-chip display
         $predStr = trim((string)($row['numbers_to_play'] ?? ''));
@@ -4082,7 +4078,31 @@ function mleAdvisoryLoadPerLotteryDrawResults($db, $userId, $lotteryId, array $r
         } else {
             $row['hits_main'] = (int)($row['top10_hits'] ?? 0);
         }
+        // Best run = most hits first, then lowest avg_winning_rank as tiebreaker
+        $rank = (float)($row['avg_winning_rank'] ?? PHP_INT_MAX);
+        $hits = (int)$row['hits_main'];
+        if ($row['has_draw'] && ($hits > $grouped[$date]['best_hits'] ||
+            ($hits === $grouped[$date]['best_hits'] && $rank < $grouped[$date]['best_rank']))) {
+            $grouped[$date]['best_hits']   = $hits;
+            $grouped[$date]['best_rank']   = $rank;
+            $grouped[$date]['best_run_id'] = (int)($row['run_id'] ?? 0);
+        }
         $grouped[$date]['runs'][] = $row;
+    }
+    // Sort runs within each group: most hits first, then lowest avg_winning_rank
+    foreach ($grouped as $gDate => $gData) {
+        $runs = $gData['runs'];
+        usort($runs, function($a, $b) {
+            $hA = (int)($a['hits_main'] ?? 0);
+            $hB = (int)($b['hits_main'] ?? 0);
+            if ($hB !== $hA) { return $hB - $hA; }
+            $rA = (float)($a['avg_winning_rank'] ?? PHP_INT_MAX);
+            $rB = (float)($b['avg_winning_rank'] ?? PHP_INT_MAX);
+            if ($rA < $rB) { return -1; }
+            if ($rA > $rB) { return 1; }
+            return 0;
+        });
+        $grouped[$gDate]['runs'] = $runs;
     }
     return $grouped;
 }
@@ -12730,10 +12750,12 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
 
         <?php if ($__drSummaryTotal > 0): ?>
         <div class="mle-adv-dr-summary">
-          <span class="mle-adv-dr-summary__item"><strong>Scored runs:</strong> <?php echo $__drSummaryTotal; ?></span>
+          <span class="mle-adv-dr-summary__item"><strong>Total scored runs:</strong> <?php echo $__drSummaryTotal; ?></span>
           <?php if ($__drSummaryBest > 0): ?>
           <span class="mle-adv-dr-summary__sep">|</span>
-          <span class="mle-adv-dr-summary__item"><strong>Best hit count:</strong> <?php echo $__drSummaryBest; ?></span>
+          <span class="mle-adv-dr-summary__item"><strong>Best result so far:</strong> <?php echo $__drSummaryBest; ?> hit<?php echo $__drSummaryBest !== 1 ? 's' : ''; ?></span>
+          <span class="mle-adv-dr-summary__sep">|</span>
+          <span class="mle-adv-dr-summary__item"><strong>Best hit count so far:</strong> <?php echo $__drSummaryBest; ?></span>
           <?php endif; ?>
           <?php if ($__drSummaryMethod !== ''): ?>
           <span class="mle-adv-dr-summary__sep">|</span>
@@ -12776,7 +12798,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
           <div class="mle-adv-dr-vrow<?php echo $__drRowCss; ?>">
 
             <div class="mle-adv-dr-vrow__meta">
-              <?php if ($__drIsBest): ?><span class="prc-trophy" title="Best run this draw" aria-label="Best run this draw">&#9733;</span><?php endif; ?>
+              <?php if ($__drIsBest): ?><span class="mle-adv-dr-vrow__best-label">Overall best</span><?php endif; ?>
               <span class="prc-src <?php echo $__drSrcClass; ?>"><?php echo $__drMethod; ?></span>
               <?php if ($__drLabel !== ''): ?><span class="mle-adv-dr-vrow__label"><?php echo $__drLabel; ?></span><?php endif; ?>
             </div>
@@ -22265,6 +22287,7 @@ html[data-mle-mode="advanced"] .mle-nonadvanced-only{display:none !important}
 .mle-adv-dr-vrow__hits-count--hit{background:#dcfce7;color:#15803d}
 .mle-adv-dr-vrow__hits-count--zero{background:#f1f5f9;color:#94a3b8;font-weight:400}
 .mle-adv-dr-vrow__rank{font-size:.72rem;color:#94a3b8;white-space:nowrap}
+.mle-adv-dr-vrow__best-label{font-size:.72rem;font-weight:700;color:#15803d;background:#dcfce7;padding:.1rem .35rem;border-radius:.25rem;white-space:nowrap}
 @media(max-width:640px){.mle-adv-dr-vrow{flex-direction:column}.mle-adv-dr-vrow__hits{align-items:flex-start;text-align:left}.mle-adv-dr-vrow__numbers-label{min-width:80px}}
 </style>
 <div class="mle-wheel-fav-section" id="favorite-wheeling-systems">
