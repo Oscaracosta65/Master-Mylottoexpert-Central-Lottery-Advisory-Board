@@ -4058,6 +4058,30 @@ function mleAdvisoryLoadPerLotteryDrawResults($db, $userId, $lotteryId, array $r
             $grouped[$date]['best_rank']   = $rank;
             $grouped[$date]['best_run_id'] = (int)($row['run_id'] ?? 0);
         }
+        // Parse number strings into arrays for ball-chip display
+        $predStr = trim((string)($row['numbers_to_play'] ?? ''));
+        $row['pred_main'] = ($predStr !== '') ? array_values(array_filter(array_map('intval', preg_split('/[\s,]+/', $predStr)), function($v){ return $v > 0; })) : array();
+        $actStr  = trim((string)($row['actual_draw_numbers'] ?? ''));
+        $row['has_draw'] = ($actStr !== '');
+        $row['actual_main']  = array();
+        $row['actual_extra'] = array();
+        if ($row['has_draw']) {
+            $extraMatch = array();
+            if (preg_match('/\+\s*(\d+(?:[,\s]+\d+)*)$/', $actStr, $extraMatch)) {
+                $row['actual_extra'] = array_values(array_filter(array_map('intval', preg_split('/[\s,]+/', trim($extraMatch[1]))), function($v){ return $v > 0; }));
+                $actStr = preg_replace('/\+\s*\d+(?:[,\s]+\d+)*$/', '', $actStr);
+            }
+            $row['actual_main'] = array_values(array_filter(array_map('intval', preg_split('/[\s,]+/', trim($actStr))), function($v){ return $v >= 0; }));
+        }
+        // Compute main hits from the parsed arrays; fall back to stored top10_hits
+        if ($row['has_draw'] && !empty($row['pred_main']) && !empty($row['actual_main'])) {
+            $actLookup = array_flip($row['actual_main']);
+            $hitCount  = 0;
+            foreach ($row['pred_main'] as $pn) { if (isset($actLookup[$pn])) { $hitCount++; } }
+            $row['hits_main'] = $hitCount;
+        } else {
+            $row['hits_main'] = (int)($row['top10_hits'] ?? 0);
+        }
         $grouped[$date]['runs'][] = $row;
     }
     return $grouped;
@@ -12675,10 +12699,26 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
     </div>
     <?php endif; ?>
 
-    <!-- 11. Draw Results Comparison (collapsed by default) -->
+    <!-- 11. Draw Results Comparison (collapsed by default, visual ball-chip style) -->
     <?php
     $__advDrawResults = (array)($__advCard['draw_results'] ?? array());
     $__advDRBodyId    = 'mle-adv-dr-' . $__advLid;
+    // Build quick summary statistics for the strip above the comparison rows
+    $__drSummaryTotal  = 0;
+    $__drSummaryBest   = 0;
+    $__drSummaryMethod = '';
+    foreach ($__advDrawResults as $__drDate => $__drGrp) {
+        foreach ((array)($__drGrp['runs'] ?? array()) as $__drSR) {
+            if (!empty($__drSR['has_draw'])) {
+                $__drSummaryTotal++;
+                $__drRunHitsS = (int)($__drSR['hits_main'] ?? $__drSR['top10_hits'] ?? 0);
+                if ($__drRunHitsS > $__drSummaryBest) {
+                    $__drSummaryBest   = $__drRunHitsS;
+                    $__drSummaryMethod = mleAdvisoryMethodLabel((string)($__drSR['source'] ?? ''));
+                }
+            }
+        }
+    }
     ?>
     <?php if (!empty($__advDrawResults)): ?>
     <div class="mle-adv-section-collapse" style="margin-top:.75rem">
@@ -12687,47 +12727,111 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
       </button>
       <div id="<?php echo $__advDRBodyId; ?>" class="mle-section-body" style="display:none" aria-hidden="true">
         <p class="mle-adv-section-desc">This shows how your saved predictions compared with the actual completed draw for this lottery.</p>
+
+        <?php if ($__drSummaryTotal > 0): ?>
+        <div class="mle-adv-dr-summary">
+          <span class="mle-adv-dr-summary__item"><strong>Scored runs:</strong> <?php echo $__drSummaryTotal; ?></span>
+          <?php if ($__drSummaryBest > 0): ?>
+          <span class="mle-adv-dr-summary__sep">|</span>
+          <span class="mle-adv-dr-summary__item"><strong>Best hit count:</strong> <?php echo $__drSummaryBest; ?></span>
+          <?php endif; ?>
+          <?php if ($__drSummaryMethod !== ''): ?>
+          <span class="mle-adv-dr-summary__sep">|</span>
+          <span class="mle-adv-dr-summary__item"><strong>Best method so far:</strong> <?php echo htmlspecialchars($__drSummaryMethod, ENT_QUOTES, 'UTF-8'); ?></span>
+          <?php endif; ?>
+        </div>
+        <?php endif; ?>
+
         <?php foreach ($__advDrawResults as $__drDate => $__drGroup):
-          $__drRuns    = (array)($__drGroup['runs']       ?? array());
+          $__drRuns    = (array)($__drGroup['runs']    ?? array());
           $__drBestId  = (int)($__drGroup['best_run_id'] ?? 0);
           if (empty($__drRuns)) { continue; }
+          $__drDateTs   = strtotime((string)$__drDate);
+          $__drDateDisp = ($__drDateTs && $__drDateTs > 0) ? date('M j, Y', $__drDateTs) : htmlspecialchars((string)$__drDate, ENT_QUOTES, 'UTF-8');
         ?>
-        <div class="mle-adv-dr-group" style="margin-bottom:1rem">
-          <div class="mle-adv-dr-group__date"><?php echo htmlspecialchars((string)$__drDate, ENT_QUOTES, 'UTF-8'); ?></div>
-          <table class="mle-adv-dr-table" role="grid" aria-label="Draw comparison <?php echo htmlspecialchars((string)$__drDate, ENT_QUOTES, 'UTF-8'); ?>">
-            <thead>
-              <tr>
-                <th>Analysis</th>
-                <th>Recipe</th>
-                <th>Prediction</th>
-                <th>Hits (top 10)</th>
-                <th>Avg Rank</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-            <?php foreach ($__drRuns as $__drRun):
-              $__drIsBest   = (int)($__drRun['run_id'] ?? 0) === $__drBestId;
-              $__drRowCss   = $__drIsBest ? ' mle-adv-dr-row--best' : '';
-              $__drMethod   = htmlspecialchars(mleAdvisoryMethodLabel((string)($__drRun['source'] ?? '')), ENT_QUOTES, 'UTF-8');
-              $__drLabel    = htmlspecialchars((string)($__drRun['label'] ?? ''), ENT_QUOTES, 'UTF-8');
-              $__drPred     = htmlspecialchars((string)($__drRun['numbers_to_play'] ?? ''), ENT_QUOTES, 'UTF-8');
-              $__drHits     = (int)($__drRun['top10_hits'] ?? 0);
-              $__drRank     = round((float)($__drRun['avg_winning_rank'] ?? 0), 1);
-              $__drAdvStatus = (string)($__drRun['advice_status'] ?? '');
-              $__drStatusLabel = ($__drAdvStatus === 'watch') ? 'Needs more review' : (($__drAdvStatus === 'retired' || $__drAdvStatus === 'archived') ? 'Recommended to remove' : 'Recommended to keep');
-            ?>
-              <tr class="mle-adv-dr-row<?php echo $__drRowCss; ?>">
-                <td><?php echo $__drMethod; ?></td>
-                <td><?php echo $__drLabel; ?></td>
-                <td><?php echo $__drPred; ?></td>
-                <td><?php echo $__drHits; ?></td>
-                <td><?php echo $__drRank; ?></td>
-                <td><?php echo htmlspecialchars($__drStatusLabel, ENT_QUOTES, 'UTF-8'); ?></td>
-              </tr>
-            <?php endforeach; ?>
-            </tbody>
-          </table>
+        <div class="mle-adv-dr-group" style="margin-bottom:1.25rem">
+          <div class="mle-adv-dr-group__date"><?php echo $__drDateDisp; ?></div>
+          <div class="mle-adv-dr-visual-rows">
+          <?php foreach ($__drRuns as $__drRun):
+            $__drIsBest    = (int)($__drRun['run_id'] ?? 0) === $__drBestId;
+            $__drHasDraw   = !empty($__drRun['has_draw']);
+            $__drMethod    = htmlspecialchars(mleAdvisoryMethodLabel((string)($__drRun['source'] ?? '')), ENT_QUOTES, 'UTF-8');
+            $__drLabel     = htmlspecialchars((string)($__drRun['label'] ?? ''), ENT_QUOTES, 'UTF-8');
+            $__drPredMain  = (array)($__drRun['pred_main']    ?? array());
+            $__drActMain   = (array)($__drRun['actual_main']  ?? array());
+            $__drActExtra  = (array)($__drRun['actual_extra'] ?? array());
+            $__drMainHits  = (int)($__drRun['hits_main']      ?? $__drRun['top10_hits'] ?? 0);
+            $__drRank      = round((float)($__drRun['avg_winning_rank'] ?? 0), 1);
+            $__drAdvStatus = (string)($__drRun['advice_status'] ?? '');
+            $__drRowCss    = $__drIsBest ? ' mle-adv-dr-vrow--best' : '';
+            $__drActLookup = ($__drHasDraw && !empty($__drActMain)) ? array_flip($__drActMain) : array();
+            $__drPredLookup = !empty($__drPredMain) ? array_flip($__drPredMain) : array();
+            $__drSrcKey    = (string)($__drRun['source'] ?? '');
+            $__drSrcClass  = 'prc-src-skip';
+            if ($__drSrcKey === 'ai_prediction')   { $__drSrcClass = 'prc-src-ai'; }
+            elseif ($__drSrcKey === 'mcmc_prediction') { $__drSrcClass = 'prc-src-mcmc'; }
+            elseif ($__drSrcKey === 'skai_prediction') { $__drSrcClass = 'prc-src-skai'; }
+            elseif ($__drSrcKey === 'heatmap')         { $__drSrcClass = 'prc-src-heatmap'; }
+          ?>
+          <div class="mle-adv-dr-vrow<?php echo $__drRowCss; ?>">
+
+            <div class="mle-adv-dr-vrow__meta">
+              <?php if ($__drIsBest): ?><span class="prc-trophy" title="Best run this draw" aria-label="Best run this draw">&#9733;</span><?php endif; ?>
+              <span class="prc-src <?php echo $__drSrcClass; ?>"><?php echo $__drMethod; ?></span>
+              <?php if ($__drLabel !== ''): ?><span class="mle-adv-dr-vrow__label"><?php echo $__drLabel; ?></span><?php endif; ?>
+            </div>
+
+            <div class="mle-adv-dr-vrow__numbers">
+              <div class="mle-adv-dr-vrow__numbers-row">
+                <span class="mle-adv-dr-vrow__numbers-label">Your numbers</span>
+                <span class="mle-adv-dr-vrow__balls">
+                <?php if (!empty($__drPredMain)):
+                    foreach ($__drPredMain as $__drN):
+                      $__drNHit = $__drHasDraw && isset($__drActLookup[$__drN]);
+                ?><span class="prc-num<?php echo $__drNHit ? ' prc-num-hit' : ''; ?>"><?php echo (int)$__drN; ?></span><?php
+                    endforeach;
+                else:
+                    $__drRawPred = htmlspecialchars((string)($__drRun['numbers_to_play'] ?? ''), ENT_QUOTES, 'UTF-8');
+                    if ($__drRawPred !== '') { echo $__drRawPred; } else { echo '<span class="prc-pending-lbl">Not saved</span>'; }
+                endif; ?>
+                </span>
+              </div>
+
+              <?php if ($__drHasDraw && !empty($__drActMain)): ?>
+              <div class="mle-adv-dr-vrow__numbers-row">
+                <span class="mle-adv-dr-vrow__numbers-label">Actual draw</span>
+                <span class="mle-adv-dr-vrow__balls">
+                <?php foreach ($__drActMain as $__drAn):
+                    $__drAnHit = isset($__drPredLookup[(int)$__drAn]);
+                ?><span class="prc-num<?php echo $__drAnHit ? ' prc-num-hit' : ''; ?>"><?php echo (int)$__drAn; ?></span><?php
+                endforeach;
+                if (!empty($__drActExtra)):
+                ?><span class="prc-extra-group"><?php foreach ($__drActExtra as $__drEn): ?><span class="prc-num prc-num-extra-miss" title="Extra ball"><?php echo (int)$__drEn; ?></span><?php endforeach; ?></span><?php
+                endif; ?>
+                </span>
+              </div>
+              <?php elseif (!$__drHasDraw): ?>
+              <div class="mle-adv-dr-vrow__numbers-row">
+                <span class="mle-adv-dr-vrow__numbers-label">Actual draw</span>
+                <span class="prc-pending-lbl">Upcoming</span>
+              </div>
+              <?php endif; ?>
+            </div>
+
+            <div class="mle-adv-dr-vrow__hits">
+              <?php if ($__drHasDraw): ?>
+                <?php if ($__drMainHits > 0): ?>
+                  <span class="mle-adv-dr-vrow__hits-count mle-adv-dr-vrow__hits-count--hit"><?php echo $__drMainHits; ?> hit<?php echo $__drMainHits !== 1 ? 's' : ''; ?></span>
+                <?php else: ?>
+                  <span class="mle-adv-dr-vrow__hits-count mle-adv-dr-vrow__hits-count--zero">0 hits</span>
+                <?php endif; ?>
+                <?php if ($__drRank > 0): ?><span class="mle-adv-dr-vrow__rank">avg rank <?php echo $__drRank; ?></span><?php endif; ?>
+              <?php endif; ?>
+            </div>
+
+          </div>
+          <?php endforeach; ?>
+          </div>
         </div>
         <?php endforeach; ?>
       </div>
@@ -22142,6 +22246,26 @@ html[data-mle-mode="advanced"] .mle-nonadvanced-only{display:none !important}
 .mle-adv-dr-table td{padding:.3rem .5rem;border-bottom:1px solid #EFEFF5;color:#334155;vertical-align:top}
 .mle-adv-dr-row--best td{background:#f0faf6;font-weight:700;color:#0A1A33}
 .mle-adv-dr-row--best td:first-child::before{content:"Best ";font-size:.7rem;color:#20C997;font-weight:700;margin-right:.2rem}
+/* Quick summary strip */
+.mle-adv-dr-summary{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem .6rem;font-size:.8rem;color:#334155;background:#f8fafc;border:1px solid #e2e8f0;border-radius:.375rem;padding:.45rem .7rem;margin-bottom:.6rem}
+.mle-adv-dr-summary__item{white-space:nowrap}
+.mle-adv-dr-summary__sep{color:#cbd5e1;user-select:none}
+/* Visual ball-chip rows */
+.mle-adv-dr-visual-rows{display:flex;flex-direction:column;gap:.5rem}
+.mle-adv-dr-vrow{border:1px solid #e2e8f0;border-radius:.375rem;padding:.5rem .65rem;background:#fff;display:flex;flex-wrap:wrap;align-items:flex-start;gap:.4rem .75rem}
+.mle-adv-dr-vrow--best{border-color:#86efac;background:#f0fdf4}
+.mle-adv-dr-vrow__meta{display:flex;flex-wrap:wrap;align-items:center;gap:.25rem .4rem;min-width:120px;flex:0 0 auto}
+.mle-adv-dr-vrow__label{font-size:.72rem;color:#64748b;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mle-adv-dr-vrow__numbers{flex:1 1 auto;display:flex;flex-direction:column;gap:.3rem}
+.mle-adv-dr-vrow__numbers-row{display:flex;align-items:center;flex-wrap:wrap;gap:.25rem}
+.mle-adv-dr-vrow__numbers-label{font-size:.72rem;color:#64748b;min-width:90px;flex:0 0 auto}
+.mle-adv-dr-vrow__balls{display:inline-flex;flex-wrap:wrap;gap:2px;align-items:center}
+.mle-adv-dr-vrow__hits{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:.15rem;min-width:70px;flex:0 0 auto;text-align:right}
+.mle-adv-dr-vrow__hits-count{font-size:.82rem;font-weight:800;padding:.15rem .4rem;border-radius:.25rem;white-space:nowrap}
+.mle-adv-dr-vrow__hits-count--hit{background:#dcfce7;color:#15803d}
+.mle-adv-dr-vrow__hits-count--zero{background:#f1f5f9;color:#94a3b8;font-weight:400}
+.mle-adv-dr-vrow__rank{font-size:.72rem;color:#94a3b8;white-space:nowrap}
+@media(max-width:640px){.mle-adv-dr-vrow{flex-direction:column}.mle-adv-dr-vrow__hits{align-items:flex-start;text-align:left}.mle-adv-dr-vrow__numbers-label{min-width:80px}}
 </style>
 <div class="mle-wheel-fav-section" id="favorite-wheeling-systems">
   <h2>My Favorite Wheeling Systems</h2>
