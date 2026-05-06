@@ -12724,7 +12724,7 @@ $__mleAdvCards  = (array)($__mleAdvData['cards'] ?? array());
           <?php endif; ?>
 
           <?php if (!MLE_DEMO_MODE): ?>
-          <p class="mle-batch-cleanup__note" style="margin-top:.5rem">"Use These Evidence Choices" will mark the recommended runs as active, place runs that need more review on Watch, and remove weaker evidence from future advice. It will not delete your saved history.</p>
+          <p class="mle-batch-cleanup__note" style="margin-top:.5rem">"Apply Run Selection" will mark the recommended runs as active, place runs that need more review on Watch, and remove weaker evidence from future advice. It will not delete your saved history.</p>
           <form method="post" class="mle-advisory-actions" style="margin-top:.75rem">
             <input type="hidden" name="mle_action"  value="apply_evidence_choices">
             <input type="hidden" name="lottery_id"  value="<?php echo $__advLid; ?>">
